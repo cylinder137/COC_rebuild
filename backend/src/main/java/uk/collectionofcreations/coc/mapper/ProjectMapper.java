@@ -180,7 +180,11 @@ public interface ProjectMapper {
 
     @Select("SELECT pf.project_file_id, pf.project_version_id, pf.file_type, pf.file_name, pf.file_size, pf.sha256, "
             + "pf.storage_path, pf.build_status, pf.build_path, pf.created_at "
-            + "FROM project_file pf WHERE pf.sha256 = #{sha256} AND pf.file_type = 'source' ORDER BY pf.project_file_id ASC LIMIT 1")
+            + "FROM project_file pf "
+            + "JOIN project_version pv ON pv.project_version_id = pf.project_version_id "
+            + "JOIN project p ON p.project_id = pv.project_id "
+            + "WHERE pf.sha256 = #{sha256} AND pf.file_type = 'source' AND p.is_deleted = 0 "
+            + "ORDER BY pf.project_file_id ASC LIMIT 1")
     Map<String, Object> findFileBySha256(@Param("sha256") String sha256);
 
     @Select("SELECT pf.project_file_id, pf.project_version_id, pf.file_type, pf.file_name, pf.file_size, pf.build_status, "

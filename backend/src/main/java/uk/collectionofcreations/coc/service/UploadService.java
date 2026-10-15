@@ -77,6 +77,17 @@ public class UploadService {
         int totalChunks = fileSize == 0 ? 1 : (int) Math.ceil((double) fileSize / chunkSize);
 
         Map<String, Object> instantFile = sha256 == null ? null : projectMapper.findFileBySha256(sha256);
+        // 秒传命中前必须确认引用的文件**确实还在磁盘上**：
+        // 已删除项目留下的陈旧文件行、或历史上被误删的文件，都会让这里命中却拿不到内容
+        // → 失效就静默回退为普通上传，绝不让用户卡死在"文件已不存在"。
+        if (instantFile != null) {
+            Path ref = storageService.resolveStored(String.valueOf(instantFile.get("storage_path")));
+            if (ref == null || !Files.exists(ref) || !Files.isRegularFile(ref)) {
+                log.warn("秒传候选失效，回退普通上传: project_file_id={} path={}",
+                        instantFile.get("project_file_id"), instantFile.get("storage_path"));
+                instantFile = null;
+            }
+        }
         Map<String, Object> session = new LinkedHashMap<>();
         session.put("user_id", uid);
         session.put("project_id", projectId);
@@ -259,7 +270,11 @@ public class UploadService {
             if (!target.toAbsolutePath().normalize().equals(sourceFile.toAbsolutePath().normalize())) {
                 Files.createDirectories(sourceDir);
                 Files.copy(sourceFile, target, StandardCopyOption.REPLACE_EXISTING);
-                Files.deleteIfExists(sourceFile);
+                // 只有「分片合并产生的临时文件」才能删；
+                // 秒传命中的是**别的项目**的正式源文件，删了会破坏那个项目（历史 bug，勿改回）
+                if (!instant) {
+                    Files.deleteIfExists(sourceFile);
+                }
             }
         } catch (IOException e) {
             throw new BizException(500, "文件落盘失败: " + e.getMessage(), 500);

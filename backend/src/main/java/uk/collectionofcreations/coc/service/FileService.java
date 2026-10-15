@@ -68,7 +68,7 @@ public class FileService {
         int versionNo = ((Number) version.get("version_no")).intValue();
         Path base = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId)).resolve("v" + versionNo);
         Path build = base.resolve("build");
-        if (Files.isDirectory(build) && containsIndex(build)) {
+        if (Files.isDirectory(build) && resolveRunEntry(build) != null) {
             return build;
         }
         Path source = base.resolve("source");
@@ -78,7 +78,33 @@ public class FileService {
         throw BizException.notFound("项目运行目录不存在");
     }
 
-    private boolean containsIndex(Path dir) {
-        return Files.exists(dir.resolve("index.html"));
+    /**
+     * 运行入口：优先 index.html，否则取目录下第一个 .html / .htm。
+     * <p>用户上传的单文件 HTML 常常不叫 index.html（如「星球 - 副本.html」），
+     * 而目录默认文档只认 index.html，所以在这里统一解析出入口名。
+     *
+     * @return 入口文件名（相对运行根目录）；没有 HTML 时返回 null
+     */
+    public String resolveRunEntry(Path dir) {
+        if (dir == null || !Files.isDirectory(dir)) {
+            return null;
+        }
+        Path index = dir.resolve("index.html");
+        if (Files.exists(index) && !Files.isDirectory(index)) {
+            return "index.html";
+        }
+        try (var stream = Files.list(dir)) {
+            return stream.filter(Files::isRegularFile)
+                    .map(p -> p.getFileName().toString())
+                    .filter(n -> {
+                        String lower = n.toLowerCase();
+                        return lower.endsWith(".html") || lower.endsWith(".htm");
+                    })
+                    .sorted()
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

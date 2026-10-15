@@ -35,14 +35,16 @@ public class ProjectService {
     private final ViewMapper viewMapper;
     private final InteractionMapper interactionMapper;
     private final ImMapper imMapper;
+    private final FileService fileService;
 
     public ProjectService(ProjectMapper projectMapper, CategoryMapper categoryMapper, ViewMapper viewMapper,
-                          InteractionMapper interactionMapper, ImMapper imMapper) {
+                          InteractionMapper interactionMapper, ImMapper imMapper, FileService fileService) {
         this.projectMapper = projectMapper;
         this.categoryMapper = categoryMapper;
         this.viewMapper = viewMapper;
         this.interactionMapper = interactionMapper;
         this.imMapper = imMapper;
+        this.fileService = fileService;
     }
 
     // ---------------- 列表 / 详情 ----------------
@@ -222,7 +224,14 @@ public class ProjectService {
         data.put("mode", "scratch".equals(type) ? "scratch" : "html");
         data.put("project_type", type);
         data.put("sandbox", true);
-        data.put("entry", "index.html");
+        // 入口名按运行目录实际内容解析（兼容用户上传的任意 HTML 文件名）
+        String entry = null;
+        try {
+            entry = fileService.resolveRunEntry(fileService.resolveRunRoot(projectId));
+        } catch (Exception ignored) {
+            // 目录还没就绪时不影响 run 接口返回地址
+        }
+        data.put("entry", entry == null ? "index.html" : entry);
         return data;
     }
 

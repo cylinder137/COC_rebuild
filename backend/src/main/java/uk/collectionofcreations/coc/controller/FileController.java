@@ -68,7 +68,12 @@ public class FileController {
             rest = rest.substring(1);
         }
         if (rest.isEmpty()) {
-            rest = "index.html";
+            // 目录默认文档：优先 index.html，否则目录下第一个 html（兼容用户上传的任意文件名）
+            String entry = fileService.resolveRunEntry(root);
+            if (entry == null) {
+                throw BizException.notFound("该项目暂无可在线运行的 HTML 入口");
+            }
+            rest = entry;
         }
         // 防盗链目录穿越
         if (rest.contains("..")) {
@@ -79,7 +84,11 @@ public class FileController {
             throw BizException.forbidden("非法路径");
         }
         if (Files.isDirectory(target)) {
-            target = target.resolve("index.html").normalize();
+            String entry = fileService.resolveRunEntry(target);
+            if (entry == null) {
+                throw BizException.notFound("运行资源不存在: " + rest);
+            }
+            target = target.resolve(entry).normalize();
         }
         if (!Files.exists(target) || Files.isDirectory(target)) {
             throw BizException.notFound("运行资源不存在: " + rest);
