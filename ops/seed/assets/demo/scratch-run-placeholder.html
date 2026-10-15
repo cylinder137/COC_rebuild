@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Scratch 项目运行占位页</title>
+<style>
+  html,body{margin:0;height:100%;font-family:"Microsoft YaHei",system-ui,sans-serif;
+    background:#0b1026;color:#e8ecff;display:flex;align-items:center;justify-content:center}
+  .card{max-width:560px;padding:32px 36px;border:1px solid #4F6EF7;border-radius:16px;
+    background:linear-gradient(160deg,rgba(79,110,247,.18),rgba(11,16,38,.9));text-align:center}
+  h1{margin:0 0 6px;font-size:20px}
+  p{margin:10px 0 0;line-height:1.7;font-size:14px;color:#b9c6ee}
+  code{background:rgba(123,211,255,.14);padding:2px 6px;border-radius:6px;color:#7BD3FF}
+  .tag{display:inline-block;margin-top:18px;padding:4px 12px;border-radius:999px;
+    background:rgba(255,122,69,.18);color:#FFB08A;font-size:12px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Scratch 打包产物占位页</h1>
+    <p>这是 <code>build/index.html</code> 的占位内容。真正的单文件播放器由
+       <code>packer</code>（端口 8091）用 <code>@turbowarp/packager</code> 生成。</p>
+    <p>看到本页说明：该项目把 <code>build/</code> 作为运行目录（优先于 <code>source/</code>），
+       但打包尚未成功或打包服务降级。</p>
+    <div class="tag">packer fallback / pending</div>
+  </div>
+</body>
+</html>

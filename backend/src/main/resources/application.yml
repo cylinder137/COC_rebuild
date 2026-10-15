@@ -1,0 +1,68 @@
+server:
+  port: 8090
+  tomcat:
+    max-http-form-post-size: 200MB
+  compression:
+    enabled: true
+
+spring:
+  application:
+    name: coc-platform-backend
+  datasource:
+    # 密码从环境变量 COC_DB_PASSWORD 读（run-dev.cmd 会从 C:\Users\Administrator\.tinker\db_password.txt 注入）
+    url: jdbc:mysql://127.0.0.1:3306/coc_platform?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false&rewriteBatchedStatements=true
+    username: root
+    password: ${COC_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    encoding: UTF-8
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 220MB
+  jackson:
+    default-property-inclusion: always
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+    call-setters-on-nulls: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+
+# ==== 平台自有配置 ====
+coc:
+  # 存储根（本机试运行）
+  storage:
+    root: E:/personalProjects/coc-platform/.data
+  jwt:
+    # 生产请改；仅本地试运行用
+    secret: coc-platform-dev-secret-key-please-change-in-production-0123456789
+    expire-hours: 168
+  upload:
+    # 分片大小默认 8MB（前端可在 init 时覆盖）
+    default-chunk-size: 8388608
+  packer:
+    # 打包服务（Node，另一个子会话实现）
+    url: http://127.0.0.1:8091/pack
+    timeout-ms: 4000
+  cors:
+    # 逗号分隔；前端开发端口 8085/8086
+    allowed-origins: "http://localhost:8085,http://127.0.0.1:8085,http://localhost:8086,http://127.0.0.1:8086"
+  report:
+    # 举报被采纳后给举报人的正反馈积分
+    reward-points: 5
+
+logging:
+  level:
+    root: INFO
+    uk.collectionofcreations.coc: INFO

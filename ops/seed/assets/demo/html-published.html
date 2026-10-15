@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>弹跳星球大冒险</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1026;color:#e8ecff;
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;overflow:hidden}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+  canvas{background:#060a1c;border-radius:12px;box-shadow:0 12px 40px rgba(79,110,247,.35);
+    max-width:96vw;max-height:78vh;touch-action:none;cursor:none}
+  #hud{display:flex;gap:18px;font-size:14px;letter-spacing:.5px}
+  #hud b{color:#7BD3FF}
+  #tip{font-size:12px;opacity:.6}
+  .pill{padding:2px 10px;border:1px solid #4F6EF7;border-radius:999px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <span class="pill">分数 <b id="score">0</b></span>
+    <span class="pill">生命 <b id="lives">3</b></span>
+    <span class="pill">关卡 <b id="level">1</b></span>
+  </div>
+  <canvas id="cv" width="720" height="480"></canvas>
+  <div id="tip">← → / 鼠标移动挡板 &nbsp;·&nbsp; 空格发球 &nbsp;·&nbsp; P 暂停</div>
+</div>
+<script>
+(function () {
+  'use strict';
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const el = { score: document.getElementById('score'), lives: document.getElementById('lives'), level: document.getElementById('level') };
+
+  const PALETTE = ['#4F6EF7', '#7BD3FF', '#36CFC9', '#9254DE', '#FF7A45', '#FFD666'];
+  let state, particles = [], stars = [];
+
+  for (let i = 0; i < 90; i++) stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.4 + .3, a: Math.random() });
+
+  function makeLevel(level) {
+    const rows = Math.min(3 + level, 7), cols = 9;
+    const bw = 62, bh = 20, gap = 8;
+    const offX = (W - (cols * bw + (cols - 1) * gap)) / 2, offY = 70;
+    const bricks = [];
+    let hp = 1 + Math.floor(level / 2);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        bricks.push({
+          x: offX + c * (bw + gap), y: offY + r * (bh + gap), w: bw, h: bh,
+          hp: r < 2 ? hp + 1 : hp, maxHp: r < 2 ? hp + 1 : hp,
+          color: PALETTE[(r + c) % PALETTE.length], alive: true
+        });
+      }
+    }
+    return bricks;
+  }
+
+  function reset(full) {
+    state = {
+      paddle: { x: W / 2 - 60, y: H - 34, w: 120, h: 12, vx: 0 },
+      ball: { x: W / 2, y: H - 60, r: 9, vx: 3.4, vy: -4.2, stuck: true },
+      bricks: makeLevel(state ? state.level : 1),
+      score: full ? 0 : (state ? state.score : 0),
+      lives: full ? 3 : (state ? state.lives : 3),
+      level: state ? state.level : 1,
+      paused: false, over: false
+    };
+  }
+
+  function serve() {
+    const b = state.ball;
+    b.stuck = false;
+    const ang = (-60 + Math.random() * 120) * Math.PI / 180 - Math.PI / 2;
+    const sp = 5.2 + state.level * 0.25;
+    b.vx = Math.cos(ang) * sp;
+    b.vy = Math.sin(ang) * sp;
+  }
+
+  function burst(x, y, color, n) {
+    for (let i = 0; i < (n || 12); i++) {
+      const a = Math.random() * Math.PI * 2, s = Math.random() * 3.4 + .8;
+      particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - .6, life: 1, color });
+    }
+  }
+
+  // ---- input
+  const keys = {};
+  addEventListener('keydown', e => {
+    keys[e.key] = true;
+    if (e.key === ' ') { e.preventDefault(); if (state.ball.stuck && !state.over) serve(); }
+    if (e.key === 'p' || e.key === 'P') state.paused = !state.paused;
+    if (e.key === 'Enter' && state.over) reset(true);
+  });
+  addEventListener('keyup', e => { keys[e.key] = false; });
+  function pointer(e) {
+    const r = cv.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    const x = (t.clientX - r.left) * (W / r.width);
+    state.paddle.x = Math.max(0, Math.min(W - state.paddle.w, x - state.paddle.w / 2));
+  }
+  cv.addEventListener('mousemove', pointer);
+  cv.addEventListener('touchmove', e => { e.preventDefault(); pointer(e); }, { passive: false });
+  cv.addEventListener('click', () => { if (state.ball.stuck && !state.over) serve(); });
+
+  // ---- update
+  function update(dt) {
+    if (state.paused || state.over) return;
+    const p = state.paddle, ball = state.ball;
+
+    if (keys.ArrowLeft || keys.a) p.x -= 7 * dt;
+    if (keys.ArrowRight || keys.d) p.x += 7 * dt;
+    p.x = Math.max(0, Math.min(W - p.w, p.x));
+
+    if (ball.stuck) { ball.x = p.x + p.w / 2; ball.y = p.y - ball.r - 1; return; }
+
+    // sub-step to avoid tunnelling at high speed
+    const steps = Math.ceil(Math.max(Math.abs(ball.vx), Math.abs(ball.vy)) / 6);
+    for (let s = 0; s < steps; s++) {
+      ball.x += ball.vx / steps;
+      ball.y += ball.vy / steps;
+
+      if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx = Math.abs(ball.vx); }
+      if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx); }
+      if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy = Math.abs(ball.vy); }
+
+      // paddle bounce with english (hit position -> angle)
+      if (ball.vy > 0 && ball.y + ball.r >= p.y && ball.y - ball.r <= p.y + p.h &&
+          ball.x >= p.x - 4 && ball.x <= p.x + p.w + 4) {
+        const rel = (ball.x - (p.x + p.w / 2)) / (p.w / 2);
+        const sp = Math.min(11, Math.hypot(ball.vx, ball.vy) * 1.02);
+        const ang = rel * (Math.PI / 3);
+        ball.vx = Math.sin(ang) * sp;
+        ball.vy = -Math.abs(Math.cos(ang) * sp);
+        ball.y = p.y - ball.r - 1;
+        burst(ball.x, ball.y, '#7BD3FF', 6);
+      }
+
+      for (const br of state.bricks) {
+        if (!br.alive) continue;
+        if (ball.x + ball.r < br.x || ball.x - ball.r > br.x + br.w ||
+            ball.y + ball.r < br.y || ball.y - ball.r > br.y + br.h) continue;
+        // resolve on the shallower penetration axis
+        const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
+        const dx = (ball.x - cx) / (br.w / 2), dy = (ball.y - cy) / (br.h / 2);
+        if (Math.abs(dx) > Math.abs(dy)) ball.vx = Math.abs(ball.vx) * Math.sign(dx || 1);
+        else ball.vy = Math.abs(ball.vy) * Math.sign(dy || 1);
+        br.hp--;
+        state.score += br.hp <= 0 ? 10 : 3;
+        burst(ball.x, ball.y, br.color, br.hp <= 0 ? 14 : 5);
+        if (br.hp <= 0) br.alive = false;
+        break;
+      }
+    }
+
+    if (ball.y - ball.r > H) {
+      state.lives--;
+      if (state.lives <= 0) { state.over = true; state.score = Math.max(0, state.score - 20); return; }
+      ball.stuck = true; ball.x = p.x + p.w / 2; ball.y = p.y - ball.r - 1;
+    }
+
+    if (state.bricks.every(b => !b.alive)) {
+      state.level++;
+      state.score += 50;
+      state.bricks = makeLevel(state.level);
+      ball.stuck = true;
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const q = particles[i];
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 0.12 * dt; q.life -= 0.024 * dt;
+      if (q.life <= 0) particles.splice(i, 1);
+    }
+    el.score.textContent = state.score;
+    el.lives.textContent = state.lives;
+    el.level.textContent = state.level;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#060a1c'; ctx.fillRect(0, 0, W, H);
+
+    for (const s of stars) {
+      s.a += 0.004; const al = 0.25 + 0.75 * Math.abs(Math.sin(s.a));
+      ctx.fillStyle = 'rgba(160,190,255,' + al.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill();
+    }
+
+    for (const br of state.bricks) {
+      if (!br.alive) continue;
+      const sh = 0.45 + 0.55 * (br.hp / br.maxHp);
+      ctx.globalAlpha = sh;
+      ctx.fillStyle = br.color;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(br.x, br.y, br.w, br.h, 5);
+      else ctx.rect(br.x, br.y, br.w, br.h);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(255,255,255,.20)';
+      ctx.fillRect(br.x + 3, br.y + 3, br.w - 6, 3);
+    }
+
+    for (const q of particles) {
+      ctx.globalAlpha = Math.max(0, q.life);
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x - 1.6, q.y - 1.6, 3.2, 3.2);
+    }
+    ctx.globalAlpha = 1;
+
+    // paddle
+    const p = state.paddle, g = ctx.createLinearGradient(p.x, 0, p.x + p.w, 0);
+    g.addColorStop(0, '#4F6EF7'); g.addColorStop(1, '#7BD3FF');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(p.x, p.y, p.w, p.h, 6); else ctx.rect(p.x, p.y, p.w, p.h);
+    ctx.fill();
+
+    // ball (a tiny planet with a ring)
+    const b = state.ball;
+    const bg = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, b.r);
+    bg.addColorStop(0, '#ffffff'); bg.addColorStop(1, '#4F6EF7');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = 'rgba(123,211,255,.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r * 1.85, b.r * 0.62, 0.4, 0, 6.283); ctx.stroke();
+
+    ctx.textAlign = 'center';
+    if (state.ball.stuck && !state.over) {
+      ctx.fillStyle = 'rgba(232,236,255,.9)'; ctx.font = '600 20px Segoe UI, Microsoft YaHei';
+      ctx.fillText('空格 / 点击画面发球', W / 2, H - 90);
+    }
+    if (state.paused) {
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff'; ctx.font = '700 34px Segoe UI';
+      ctx.fillText('已暂停（P 继续）', W / 2, H / 2);
+    }
+    if (state.over) {
+      ctx.fillStyle = 'rgba(6,10,28,.78)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#7BD3FF'; ctx.font = '700 38px Segoe UI';
+      ctx.fillText('游戏结束', W / 2, H / 2 - 26);
+      ctx.fillStyle = '#e8ecff'; ctx.font = '500 20px Segoe UI';
+      ctx.fillText('最终分数 ' + state.score + ' · 到达第 ' + state.level + ' 关', W / 2, H / 2 + 14);
+      ctx.fillStyle = 'rgba(232,236,255,.75)'; ctx.font = '400 16px Segoe UI';
+      ctx.fillText('按 Enter 重新开始', W / 2, H / 2 + 52);
+    }
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(3, (now - last) / 16.667); last = now;
+    update(dt); draw();
+    requestAnimationFrame(loop);
+  }
+  reset(true);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+/* ============ 设计令牌（照 02-ui.md §1 落地，默认深色科技风） ============ */
+:root,
+html[data-theme='dark'] {
+  --c-primary: #6c86ff;
+  --c-primary-hover: #8aa0ff;
+  --c-primary-active: #a6b8ff;
+  --c-primary-weak: #232a4a;
+  --c-primary-border: #3a4780;
+  --c-accent: #7b5cf0;
+  --c-accent-2: #a855f7;
+  --c-gradient-brand: linear-gradient(135deg, #4f6ef7 0%, #7b5cf0 50%, #a855f7 100%);
+
+  --c-type-scratch: #fbbf24;
+  --c-type-scratch-weak: #3a2e12;
+  --c-type-html: #34d399;
+  --c-type-html-weak: #0f2e24;
+  --c-type-structure: #38bdf8;
+  --c-type-structure-weak: #0b2a38;
+
+  --c-success: #22c55e;
+  --c-warning: #f59e0b;
+  --c-danger: #ef4444;
+  --c-info: #38bdf8;
+
+  --c-bg-page: #0f1117;
+  --c-bg-subtle: #151823;
+  --c-bg-sunken: #1b1f2c;
+  --c-bg-card: #171a24;
+  --c-bg-hover: #1f2433;
+  --c-border: #262b3a;
+  --c-border-strong: #323849;
+
+  --c-text-1: #e6e8ef;
+  --c-text-2: #9ba3b4;
+  --c-text-3: #6b7383;
+  --c-text-inverse: #0f1117;
+  --c-overlay: rgba(0, 0, 0, 0.6);
+  --c-footer: #0b0d13;
+
+  --sh-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --sh-2: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --sh-4: 0 24px 56px rgba(0, 0, 0, 0.65);
+  --sh-brand: 0 4px 14px rgba(108, 134, 255, 0.35);
+}
+
+html[data-theme='light'] {
+  --c-primary: #4f6ef7;
+  --c-primary-hover: #3a55d8;
+  --c-primary-active: #2f46bc;
+  --c-primary-weak: #eef1ff;
+  --c-primary-border: #c3ccff;
+  --c-accent: #7b5cf0;
+  --c-accent-2: #a855f7;
+
+  --c-type-scratch: #f59e0b;
+  --c-type-scratch-weak: #fff7e6;
+  --c-type-html: #10b981;
+  --c-type-html-weak: #e7f8f1;
+  --c-type-structure: #0ea5e9;
+  --c-type-structure-weak: #e6f6fe;
+
+  --c-success: #16a34a;
+  --c-warning: #d97706;
+  --c-danger: #dc2626;
+  --c-info: #0ea5e9;
+
+  --c-bg-page: #ffffff;
+  --c-bg-subtle: #f7f8fc;
+  --c-bg-sunken: #f2f4fa;
+  --c-bg-card: #ffffff;
+  --c-bg-hover: #f5f6fb;
+  --c-border: #e8eaf0;
+  --c-border-strong: #d8dce6;
+
+  --c-text-1: #1a1d24;
+  --c-text-2: #5f6672;
+  --c-text-3: #9aa1ad;
+  --c-text-inverse: #ffffff;
+  --c-overlay: rgba(26, 29, 36, 0.45);
+  --c-footer: #14161c;
+
+  --sh-1: 0 1px 3px rgba(26, 29, 36, 0.06);
+  --sh-2: 0 6px 20px rgba(26, 29, 36, 0.07);
+  --sh-3: 0 12px 32px rgba(26, 29, 36, 0.1);
+  --sh-4: 0 24px 56px rgba(26, 29, 36, 0.16);
+  --sh-brand: 0 4px 12px rgba(79, 110, 247, 0.32);
+}
+
+:root {
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  --w-container: 1280px;
+  --w-reading: 1160px;
+  --w-narrow: 880px;
+  --w-sidebar: 248px;
+  --h-header: 64px;
+
+  --fs-h1: 26px;
+  --fs-h2: 20px;
+  --fs-h3: 17px;
+  --fs-body-l: 16px;
+  --fs-body: 14.5px;
+  --fs-sm: 13px;
+  --fs-xs: 12px;
+  --fs-mono: 13px;
+
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Element Plus 变量对齐（深色为主要口径） */
+html[data-theme='dark'] {
+  --el-color-primary: var(--c-primary);
+  --el-color-primary-light-3: #5566c9;
+  --el-color-primary-light-5: #3f4b96;
+  --el-color-primary-light-7: #2b334f;
+  --el-color-primary-light-8: #232a4a;
+  --el-color-primary-light-9: #1c2138;
+  --el-color-primary-dark-2: var(--c-primary-active);
+  --el-bg-color: var(--c-bg-card);
+  --el-bg-color-page: var(--c-bg-page);
+  --el-bg-color-overlay: var(--c-bg-card);
+  --el-text-color-primary: var(--c-text-1);
+  --el-text-color-regular: var(--c-text-2);
+  --el-text-color-secondary: var(--c-text-3);
+  --el-border-color: var(--c-border);
+  --el-border-color-light: var(--c-border);
+  --el-border-color-lighter: var(--c-border);
+  --el-fill-color: var(--c-bg-sunken);
+  --el-fill-color-light: var(--c-bg-hover);
+  --el-fill-color-blank: var(--c-bg-card);
+  --el-border-radius-base: var(--r-md);
+  --el-mask-color: rgba(0, 0, 0, 0.7);
+}
+html[data-theme='light'] {
+  --el-color-primary: var(--c-primary);
+  --el-bg-color: var(--c-bg-card);
+  --el-bg-color-page: var(--c-bg-page);
+  --el-text-color-primary: var(--c-text-1);
+  --el-text-color-regular: var(--c-text-2);
+  --el-border-color: var(--c-border);
+  --el-border-radius-base: var(--r-md);
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-user/
+*.log
+
+# 本地覆盖，别提交
+.env.local
+.env.*.local
+.vite/

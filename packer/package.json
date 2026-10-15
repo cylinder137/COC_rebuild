@@ -1,0 +1,14 @@
+{
+  "name": "coc-packager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "造物集（coc-platform）Scratch 打包服务：把 sb/sb2/sb3 转成单文件 HTML",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --max-old-space-size=768 server.js",
+    "pack-cli": "node pack-cli.js"
+  },
+  "dependencies": {
+    "@turbowarp/packager": "3.13.0"
+  }
+}

@@ -1,0 +1,15 @@
+# 依赖与构建产物
+node_modules/
+target/
+dist/
+dist-user/
+*.jar
+
+# 运行期数据（上传/产物/日志）
+.data/
+ops/logs/
+*.log
+
+# 本地环境
+.env.local
+.my.cnf

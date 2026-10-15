@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>粒子烟花秀（待审）</title>
+<style>
+  html,body{margin:0;height:100%;background:radial-gradient(circle at 50% 60%,#131a3a,#05070f 70%);
+    display:flex;align-items:center;justify-content:center;font-family:"Microsoft YaHei",sans-serif;overflow:hidden}
+  canvas{border-radius:14px;box-shadow:0 10px 40px rgba(255,122,69,.25)}
+  .cap{position:absolute;bottom:18px;color:#8fa2d8;font-size:12px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<canvas id="cv" width="640" height="420"></canvas>
+<div class="cap">点击 / 触摸画面放一朵烟花</div>
+<script>
+(function () {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  let parts = [], hue = 20, t = 0;
+  const COLORS = ['#FF7A45', '#FFD666', '#7BD3FF', '#9254DE', '#36CFC9', '#FF85C0'];
+
+  function fire(x, y) {
+    const n = 70 + (Math.random() * 40 | 0), c = COLORS[(hue++) % COLORS.length];
+    hue += 37;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, sp = 1.2 + Math.random() * 3.6;
+      parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, c });
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * 6.283, sp = Math.random() * 1.2;
+      parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.4, life: 1, c: '#ffffff' });
+    }
+  }
+
+  cv.addEventListener('click', e => {
+    const r = cv.getBoundingClientRect();
+    fire((e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height);
+  });
+  cv.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const r = cv.getBoundingClientRect(), tp = e.touches[0];
+    fire((tp.clientX - r.left) * W / r.width, (tp.clientY - r.top) * H / r.height);
+  }, { passive: false });
+
+  function loop() {
+    t += 1;
+    if (t % 70 === 0) fire(W * (0.2 + Math.random() * 0.6), H * (0.15 + Math.random() * 0.4));
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(5,7,15,.20)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.045; p.vx *= 0.992; p.vy *= 0.992; p.life -= 0.016;
+      if (p.life <= 0) { parts.splice(i, 1); continue; }
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.1 * p.life + 0.4, 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(loop);
+  }
+  fire(W / 2, H / 2);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
