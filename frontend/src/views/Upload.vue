@@ -90,6 +90,14 @@
         <ChunkUploader :project-id="form.project_id" @completed="onUploaded" @reset="uploaded = null" />
       </div>
 
+      <div class="card mb16">
+        <div class="card-hd">
+          <span>项目封面</span>
+          <span class="xs dim" v-if="form.cover_path">已设置</span>
+        </div>
+        <CoverUploader :project-id="form.project_id" :cover-path="form.cover_path" @updated="onCover" />
+      </div>
+
       <div v-if="uploaded" class="card mb16">
         <div class="card-hd">上传结果</div>
         <div class="kv"><span class="dim">文件 ID</span><span class="mono">{{ uploaded.project_file_id }}</span></div>
@@ -126,6 +134,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChunkUploader from '@/components/ChunkUploader.vue'
+import CoverUploader from '@/components/CoverUploader.vue'
 import { categoryApi, uploadApi, safe } from '@/api'
 import { isAutoApproved } from '@/utils/format'
 
@@ -143,6 +152,7 @@ const form = reactive({
   summary: '',
   description: '',
   category_id: '',
+  cover_path: '',
   tags: []
 })
 
@@ -161,6 +171,8 @@ async function saveDraft() {
   creating.value = true
   const payload = { ...form, tags: form.tags.slice(0, 5) }
   delete payload.project_id
+  // 封面是在草稿建好之后由 CoverUploader 直接写库的，这里空值不能回传（否则会把已上传的封面覆盖成空）
+  if (!payload.cover_path) delete payload.cover_path
   const r = await safe(uploadApi.createProject(payload))
   creating.value = false
   if (!r.ok) {
@@ -168,11 +180,14 @@ async function saveDraft() {
     return
   }
   form.project_id = r.data?.project_id || r.data?.id
+  if (r.data?.cover_path) form.cover_path = r.data.cover_path
   ElMessage.success('草稿已保存')
   step.value = 2
 }
 
 function onUploaded(res) { uploaded.value = res }
+
+function onCover(d) { form.cover_path = d?.cover_path || '' }
 
 async function submit() {
   if (!form.project_id) { ElMessage.warning('草稿尚未创建，请返回上一步'); return }

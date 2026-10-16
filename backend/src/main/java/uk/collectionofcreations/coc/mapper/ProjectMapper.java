@@ -66,6 +66,14 @@ public interface ProjectMapper {
             + "WHERE project_id = #{project_id}")
     int updateProjectBasic(Map<String, Object> param);
 
+    @Update("UPDATE project SET cover_path = #{cover_path}, updated_at = NOW() "
+            + "WHERE project_id = #{project_id} AND is_deleted = 0")
+    int updateCover(Map<String, Object> param);
+
+    @Update("UPDATE project SET cover_path = NULL, updated_at = NOW() "
+            + "WHERE project_id = #{project_id} AND is_deleted = 0")
+    int clearCover(@Param("project_id") long projectId);
+
     @Update("UPDATE project SET status = 2, published_at = IFNULL(published_at, NOW()), "
             + "reject_reason = NULL, down_reason = NULL, updated_at = NOW() WHERE project_id = #{project_id}")
     int publishProject(@Param("project_id") long projectId);

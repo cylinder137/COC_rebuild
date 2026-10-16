@@ -32,6 +32,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/v1/projects",
             "PUT:/api/v1/projects/*",
             "POST:/api/v1/projects/*/submit",
+            "POST:/api/v1/projects/*/cover",
+            "DELETE:/api/v1/projects/*/cover",
             "POST:/api/v1/projects/*/like",
             "POST:/api/v1/projects/*/favorite",
             "POST:/api/v1/projects/*/build/retry",

@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import uk.collectionofcreations.coc.common.ApiResponse;
 import uk.collectionofcreations.coc.common.Params;
@@ -102,5 +105,18 @@ public class ProjectController {
     @PostMapping("/projects/{project_id}/build/retry")
     public ApiResponse<Map<String, Object>> retryBuild(@PathVariable("project_id") long projectId) {
         return ApiResponse.ok(uploadService.retryBuild(projectId));
+    }
+
+    /** 上传 / 更换项目封面（作者或管理员）。图片落到存储根 covers/，写回 project.cover_path */
+    @PostMapping(value = "/projects/{project_id}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> uploadCover(@PathVariable("project_id") long projectId,
+                                                        @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(projectService.uploadCover(projectId, file));
+    }
+
+    /** 移除项目封面（作者或管理员） */
+    @DeleteMapping("/projects/{project_id}/cover")
+    public ApiResponse<Map<String, Object>> removeCover(@PathVariable("project_id") long projectId) {
+        return ApiResponse.ok(projectService.removeCover(projectId));
     }
 }

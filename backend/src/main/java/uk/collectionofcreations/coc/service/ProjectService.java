@@ -36,15 +36,118 @@ public class ProjectService {
     private final InteractionMapper interactionMapper;
     private final ImMapper imMapper;
     private final FileService fileService;
+    private final uk.collectionofcreations.coc.storage.StorageService storageService;
 
     public ProjectService(ProjectMapper projectMapper, CategoryMapper categoryMapper, ViewMapper viewMapper,
-                          InteractionMapper interactionMapper, ImMapper imMapper, FileService fileService) {
+                          InteractionMapper interactionMapper, ImMapper imMapper, FileService fileService,
+                          uk.collectionofcreations.coc.storage.StorageService storageService) {
         this.projectMapper = projectMapper;
         this.categoryMapper = categoryMapper;
         this.viewMapper = viewMapper;
         this.interactionMapper = interactionMapper;
         this.imMapper = imMapper;
         this.fileService = fileService;
+        this.storageService = storageService;
+    }
+
+    // ---------------- 封面 ----------------
+
+    /** 封面图上限 5 MB；只收常见图片后缀 */
+    private static final long COVER_MAX_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> COVER_EXT = Set.of("jpg", "jpeg", "png", "webp", "gif");
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    /** 作者（或管理员）上传/更换项目封面：落到 covers/p{项目id}-{时间戳}.{ext}，并写回 project.cover_path */
+    @Transactional
+    public Map<String, Object> uploadCover(long projectId, org.springframework.web.multipart.MultipartFile file) {
+        Long uid = AuthContext.requireUserId();
+        Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null || ((Number) project.get("is_deleted")).intValue() == 1) {
+            throw BizException.notFound("项目不存在");
+        }
+        boolean isAdmin = AuthContext.isAdmin();
+        long authorId = ((Number) project.get("author_id")).longValue();
+        if (!isAdmin && !uid.equals(authorId)) {
+            throw BizException.forbidden("只有作者本人可以上传封面");
+        }
+        if (file == null || file.isEmpty()) {
+            throw BizException.badRequest("请选择一张封面图片");
+        }
+        if (file.getSize() > COVER_MAX_BYTES) {
+            throw BizException.badRequest("封面不能超过 5 MB");
+        }
+        String orig = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        int dot = orig.lastIndexOf('.');
+        String ext = dot >= 0 ? orig.substring(dot + 1).toLowerCase() : "";
+        if (!COVER_EXT.contains(ext)) {
+            throw BizException.badRequest("封面只支持 jpg / jpeg / png / webp / gif");
+        }
+        String contentType = file.getContentType();
+        if (contentType != null && !contentType.toLowerCase().startsWith("image/")) {
+            throw BizException.badRequest("文件类型不是图片");
+        }
+        String name = "p" + projectId + "-" + STAMP.format(LocalDateTime.now()) + "." + ext;
+        try {
+            java.nio.file.Path dir = storageService.coversDir();
+            java.nio.file.Path target = dir.resolve(name);
+            try (java.io.InputStream in = file.getInputStream()) {
+                java.nio.file.Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            // 换封面时清掉旧图（只删 covers 目录内的，避免误删外链/其它目录文件）
+            Object old = project.get("cover_path");
+            if (old != null && !String.valueOf(old).isBlank()) {
+                java.nio.file.Path oldPath = storageService.resolveStored(String.valueOf(old));
+                if (oldPath != null && oldPath.getParent() != null
+                        && oldPath.getParent().equals(dir)
+                        && !oldPath.getFileName().toString().equals(name)) {
+                    storageService.deleteQuietly(oldPath);
+                }
+            }
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("project_id", projectId);
+            p.put("cover_path", "covers/" + name);
+            projectMapper.updateCover(p);
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("project_id", projectId);
+            data.put("cover_path", "covers/" + name);
+            data.put("cover_url", "/covers/" + name);
+            data.put("file_name", name);
+            data.put("size", file.getSize());
+            return data;
+        } catch (java.io.IOException e) {
+            throw new BizException(1003, "封面保存失败：" + e.getMessage());
+        }
+    }
+
+    /** 移除封面（只清库里的 cover_path + 删 covers 目录内的文件） */
+    @Transactional
+    public Map<String, Object> removeCover(long projectId) {
+        Long uid = AuthContext.requireUserId();
+        Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null || ((Number) project.get("is_deleted")).intValue() == 1) {
+            throw BizException.notFound("项目不存在");
+        }
+        if (!AuthContext.isAdmin() && !uid.equals(((Number) project.get("author_id")).longValue())) {
+            throw BizException.forbidden("只有作者本人可以移除封面");
+        }
+        Object old = project.get("cover_path");
+        if (old != null && !String.valueOf(old).isBlank()) {
+            try {
+                java.nio.file.Path dir = storageService.coversDir();
+                java.nio.file.Path oldPath = storageService.resolveStored(String.valueOf(old));
+                if (oldPath != null && oldPath.getParent() != null && oldPath.getParent().equals(dir)) {
+                    storageService.deleteQuietly(oldPath);
+                }
+            } catch (java.io.IOException ignored) {
+                // 目录不可用时忽略：库里清空即可
+            }
+        }
+        projectMapper.clearCover(projectId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("cover_path", null);
+        return data;
     }
 
     // ---------------- 列表 / 详情 ----------------

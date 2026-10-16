@@ -64,6 +64,32 @@ public class StorageService {
         return root.resolve("projects").resolve(String.valueOf(projectId));
     }
 
+    /** 封面目录（covers/）：项目封面统一落这里，前端按 /covers/{文件名} 取图 */
+    public Path coversDir() throws IOException {
+        Path p = root.resolve("covers");
+        Files.createDirectories(p);
+        return p;
+    }
+
+    /** 头像目录（avatars/） */
+    public Path avatarsDir() throws IOException {
+        Path p = root.resolve("avatars");
+        Files.createDirectories(p);
+        return p;
+    }
+
+    /** 删除单个文件（不存在或删不掉都不抛异常）；用于替换封面时清旧图 */
+    public void deleteQuietly(Path p) {
+        if (p == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(p);
+        } catch (IOException e) {
+            log.warn("删除文件失败: {}", p, e);
+        }
+    }
+
     /** 上传分片暂存目录：uploads/staging/{sessionId} */
     public Path stagingDir(long sessionId) throws IOException {
         Path p = root.resolve("uploads").resolve("staging").resolve(String.valueOf(sessionId));

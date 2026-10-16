@@ -58,7 +58,13 @@ export const uploadApi = {
   submit: (pid) => http.post(`/projects/${pid}/submit`),
   myProjects: (params) => http.get('/users/me/projects', { params }),
   fileContent: (fid) => http.get(`/files/${fid}/content`, { responseType: 'blob' }),
-  buildRetry: (pid) => http.post(`/projects/${pid}/build/retry`)
+  buildRetry: (pid) => http.post(`/projects/${pid}/build/retry`),
+  /** 上传/更换项目封面（multipart） */
+  uploadCover: (pid, formData) => http.post(`/projects/${pid}/cover`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  /** 移除项目封面 */
+  removeCover: (pid) => http.delete(`/projects/${pid}/cover`)
 }
 
 /* ================= 3.5 私信 / 项目群 ================= */

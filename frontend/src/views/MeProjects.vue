@@ -39,6 +39,7 @@
             <el-button size="small" text>查看</el-button>
           </router-link>
           <el-button v-if="p.status === 2" size="small" text @click="goDashboard(p)">看数据</el-button>
+          <el-button size="small" text @click="openCover(p)">封面</el-button>
           <el-button v-if="isRejectedOrDown(p)" size="small" text type="primary" @click="resubmit(p)">
             重新编辑投稿
           </el-button>
@@ -49,6 +50,19 @@
     <div v-if="list.length >= total && list.length" class="xs dim" style="text-align:center;padding:20px">
       共 {{ total }} 件作品
     </div>
+
+    <!-- 更换封面（作者本人） -->
+    <el-dialog v-model="coverVisible" title="设置项目封面" width="520px">
+      <p class="xs dim" style="margin-top:0">
+        正在编辑《{{ coverTarget?.title }}》。封面会用在首页卡片、作品详情页与分享图。
+      </p>
+      <CoverUploader
+        v-if="coverTarget"
+        :project-id="coverTarget.project_id || coverTarget.id"
+        :cover-path="coverTarget.cover_path"
+        @updated="onCoverUpdated"
+      />
+    </el-dialog>
   </div>
 </template>
 
@@ -58,6 +72,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import ProjectCard from '@/components/ProjectCard.vue'
+import CoverUploader from '@/components/CoverUploader.vue'
 import { uploadApi, safe } from '@/api'
 import { pickList, pickTotal } from '@/utils/format'
 
@@ -67,6 +82,21 @@ const total = ref(0)
 const loading = ref(false)
 const error = ref(null)
 const status = ref('')
+const coverVisible = ref(false)
+const coverTarget = ref(null)
+
+/** 打开某作品的封面设置弹窗 */
+function openCover(p) {
+  coverTarget.value = { ...p }
+  coverVisible.value = true
+}
+/** 封面变更后就地更新列表里的那张卡，避免整页重刷 */
+function onCoverUpdated(d) {
+  const id = coverTarget.value?.project_id || coverTarget.value?.id
+  const hit = list.value.find((x) => (x.project_id || x.id) === id)
+  if (hit) hit.cover_path = d?.cover_path || ''
+  if (coverTarget.value) coverTarget.value.cover_path = d?.cover_path || ''
+}
 
 function isRejectedOrDown(p) { return p.status === 3 || p.status === 4 }
 
