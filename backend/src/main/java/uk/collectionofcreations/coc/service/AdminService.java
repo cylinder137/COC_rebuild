@@ -135,6 +135,12 @@ public class AdminService {
         }
         long projectId = ((Number) version.get("project_id")).longValue();
         Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null) {
+            throw BizException.notFound("作品不存在");
+        }
+        if (project.get("is_deleted") != null && ((Number) project.get("is_deleted")).intValue() == 1) {
+            throw BizException.badRequest("该作品已被驳回删除，无需重复操作");
+        }
         String r = (reason == null || reason.trim().isEmpty()) ? "不符合投稿规范" : reason.trim();
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("project_id", projectId);
@@ -143,13 +149,11 @@ public class AdminService {
         Path dir = storageService.projectRootDir(projectId);
         boolean existed = Files.exists(dir);
         storageService.deleteRecursively(dir);
-        if (project != null) {
-            notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品未通过审核",
-                    "《" + project.get("title") + "》未通过审核，已删除。原因：" + r, "/me/projects");
-            audit(adminId, "reject_project_deleted", "project", projectId,
-                    "驳回即删除：《" + project.get("title") + "》原因：" + r
-                            + "，代码目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
-        }
+        notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品未通过审核",
+                "《" + project.get("title") + "》未通过审核，已删除。原因：" + r, "/me/projects");
+        audit(adminId, "reject_project_deleted", "project", projectId,
+                "驳回即删除：《" + project.get("title") + "》原因：" + r
+                        + "，代码目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 4);
