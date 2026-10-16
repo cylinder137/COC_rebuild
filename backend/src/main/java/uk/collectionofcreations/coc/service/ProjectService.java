@@ -93,13 +93,12 @@ public class ProjectService {
             try (java.io.InputStream in = file.getInputStream()) {
                 java.nio.file.Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
-            // 换封面时清掉旧图（只删 covers 目录内的，避免误删外链/其它目录文件）
+            // 换封面时清掉旧图：只删本接口生成的（p{项目id}-{时间戳}.{ext}）且位于 covers 目录内的文件，
+            // 避免误删种子封面/共享图（种子图如 cover-02.png 可能被别的作品共用）
             Object old = project.get("cover_path");
             if (old != null && !String.valueOf(old).isBlank()) {
                 java.nio.file.Path oldPath = storageService.resolveStored(String.valueOf(old));
-                if (oldPath != null && oldPath.getParent() != null
-                        && oldPath.getParent().equals(dir)
-                        && !oldPath.getFileName().toString().equals(name)) {
+                if (isGeneratedCover(oldPath, dir) && !oldPath.getFileName().toString().equals(name)) {
                     storageService.deleteQuietly(oldPath);
                 }
             }
@@ -120,7 +119,15 @@ public class ProjectService {
         }
     }
 
-    /** 移除封面（只清库里的 cover_path + 删 covers 目录内的文件） */
+    /** 是否本接口生成的封面文件（p{项目id}-{14位时间戳}.{ext} 且位于 covers 目录内）——只删这种，不碰种子/共享图 */
+    private boolean isGeneratedCover(java.nio.file.Path p, java.nio.file.Path coversDir) {
+        if (p == null || p.getParent() == null || !p.getParent().equals(coversDir)) {
+            return false;
+        }
+        return p.getFileName().toString().matches("^p\\d+-\\d{14}\\.(jpg|jpeg|png|webp|gif)$");
+    }
+
+    /** 移除封面（只清库里的 cover_path + 删本接口生成的封面文件） */
     @Transactional
     public Map<String, Object> removeCover(long projectId) {
         Long uid = AuthContext.requireUserId();
@@ -136,7 +143,7 @@ public class ProjectService {
             try {
                 java.nio.file.Path dir = storageService.coversDir();
                 java.nio.file.Path oldPath = storageService.resolveStored(String.valueOf(old));
-                if (oldPath != null && oldPath.getParent() != null && oldPath.getParent().equals(dir)) {
+                if (isGeneratedCover(oldPath, dir)) {
                     storageService.deleteQuietly(oldPath);
                 }
             } catch (java.io.IOException ignored) {
