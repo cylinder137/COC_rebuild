@@ -26,9 +26,40 @@
                 :type="following ? 'default' : 'primary'"
                 @click="toggleFollow"
               >{{ following ? '已关注' : '+ 关注' }}</el-button>
-              <router-link v-else to="/me/projects"><el-button>我的作品</el-button></router-link>
+              <template v-else>
+                <el-button @click="openPwd">
+                  <el-icon><Lock /></el-icon>&nbsp;修改密码
+                </el-button>
+                <router-link to="/me/projects"><el-button>我的作品</el-button></router-link>
+              </template>
             </div>
           </div>
+
+          <!-- 修改密码（只有看自己的主页才有入口） -->
+          <el-dialog v-model="pwdVisible" title="修改密码" width="420px" :close-on-click-modal="false">
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              title="改完会自动换上新的登录凭证，其它设备上的登录态将失效，需要重新登录。"
+              style="margin-bottom:12px"
+            />
+            <el-form label-position="top" @submit.prevent>
+              <el-form-item label="原密码">
+                <el-input v-model="pwd.old_password" type="password" show-password placeholder="当前使用的密码" />
+              </el-form-item>
+              <el-form-item label="新密码">
+                <el-input v-model="pwd.new_password" type="password" show-password placeholder="6-64 位" />
+              </el-form-item>
+              <el-form-item label="确认新密码">
+                <el-input v-model="pwd.confirm" type="password" show-password placeholder="再输一遍新密码" />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="pwdVisible = false">取消</el-button>
+              <el-button type="primary" :loading="pwdLoading" @click="submitPwd">确认修改</el-button>
+            </template>
+          </el-dialog>
 
           <!-- 作品列表 -->
           <h2 class="section-title" style="margin:28px 0 16px">作品</h2>
@@ -52,12 +83,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import ProjectCard from '@/components/ProjectCard.vue'
-import { userApi, interactApi, imApi, safe } from '@/api'
+import { userApi, interactApi, imApi, authApi, safe, setToken } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { pickList } from '@/utils/format'
@@ -74,6 +105,38 @@ const following = ref(false)
 const chatting = ref(false)
 const loading = ref(false)
 const error = ref(null)
+
+/* ---------- 修改密码（仅本人主页可见） ---------- */
+const pwdVisible = ref(false)
+const pwdLoading = ref(false)
+const pwd = reactive({ old_password: '', new_password: '', confirm: '' })
+
+function openPwd() {
+  pwd.old_password = ''
+  pwd.new_password = ''
+  pwd.confirm = ''
+  pwdVisible.value = true
+}
+
+async function submitPwd() {
+  const { old_password: oldPwd, new_password: newPwd, confirm } = pwd
+  if (!oldPwd) { ElMessage.warning('请填写原密码'); return }
+  if (!newPwd || newPwd.length < 6 || newPwd.length > 64) { ElMessage.warning('新密码长度需为 6-64 位'); return }
+  if (newPwd === oldPwd) { ElMessage.warning('新密码不能与原密码相同'); return }
+  if (newPwd !== confirm) { ElMessage.warning('两次输入的新密码不一致'); return }
+  pwdLoading.value = true
+  const r = await safe(authApi.changePassword({ old_password: oldPwd, new_password: newPwd }))
+  pwdLoading.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '修改失败，请重试'); return }
+  // 后端改密会 token_version+1（所有旧凭证立刻失效），同时返回新 token —— 必须马上换上
+  if (r.data?.token) {
+    setToken(r.data.token)
+    auth.token = r.data.token
+    auth.mustChangePassword = false
+  }
+  pwdVisible.value = false
+  ElMessage.success('密码已修改，其它设备需重新登录')
+}
 
 const isSelf = computed(() => auth.user?.user_id && auth.user.user_id === Number(route.params.id))
 
