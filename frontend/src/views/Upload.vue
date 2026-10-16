@@ -87,7 +87,7 @@
           <span>上传文件</span>
           <span class="xs dim" v-if="form.project_id">草稿 ID：#{{ form.project_id }}</span>
         </div>
-        <ChunkUploader @completed="onUploaded" @reset="uploaded = null" />
+        <ChunkUploader :project-id="form.project_id" @completed="onUploaded" @reset="uploaded = null" />
       </div>
 
       <div v-if="uploaded" class="card mb16">
@@ -154,7 +154,7 @@ const types = [
 
 const isAuto = computed(() => isAutoApproved(form.project_type))
 const canNext = computed(() => !!form.title.trim() && !!form.summary.trim())
-const canSubmit = computed(() => !!uploaded.value?.project_file_id || !!uploaded.value?.storage_path)
+const canSubmit = computed(() => !!uploaded.value?.project_file_id)
 
 async function saveDraft() {
   if (!canNext.value) { ElMessage.warning('请填写标题与简介'); return }

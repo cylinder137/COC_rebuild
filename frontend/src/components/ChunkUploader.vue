@@ -101,7 +101,9 @@ import { fmtSize } from '@/utils/format'
 
 const props = defineProps({
   /** 分片大小（字节），默认 5MB；后端 init 会回传自己的 chunk_size 并覆盖 */
-  chunkSize: { type: Number, default: 5 * 1024 * 1024 }
+  chunkSize: { type: Number, default: 5 * 1024 * 1024 },
+  /** 关联的项目 id：init/complete 都必须带上，否则后端不会登记 project_version / project_file */
+  projectId: { type: [Number, String], default: null }
 })
 const emit = defineEmits(['completed', 'progress', 'reset'])
 
@@ -185,7 +187,9 @@ async function startUpload(isRetry) {
       file_name: file.value.name,
       file_size: file.value.size,
       sha256: hash || '',
-      chunk_size: props.chunkSize
+      chunk_size: props.chunkSize,
+      // 关键：带上 project_id，后端才会在 complete 时登记项目版本与文件
+      project_id: props.projectId ? Number(props.projectId) : null
     }))
     if (!r.ok) {
       state.value = 'error'
@@ -255,20 +259,32 @@ async function retryFailed() {
   await uploadMissing()
 }
 
-/** 3) complete：校验 sha256 → 落盘 → 建 project_file */
+/** 3) complete：校验 sha256 → 落盘 → 建 project_version / project_file */
 async function complete() {
-  const r = await safe(uploadApi.complete(sessionId.value, {}))
+  const r = await safe(uploadApi.complete(sessionId.value, {
+    project_id: props.projectId ? Number(props.projectId) : null
+  }))
   if (!r.ok) {
     state.value = 'error'
     ElMessage.error('合并分片失败，请重试')
     return
   }
+  const fileId = r.data?.project_file_id || null
+  // 后端在「没带 project_id」时不会登记版本/文件，只把文件丢在 uploads/tmp —— 这属于失败，必须报出来
+  if (!fileId) {
+    state.value = 'error'
+    projectFileId.value = null
+    storagePath.value = ''
+    emit('completed', null)
+    ElMessage.error(r.data?.message || '文件已上传但未登记到作品（缺少 project_id），请返回上一步先保存草稿再上传')
+    return
+  }
   state.value = 'done'
   storagePath.value = r.data?.storage_path || ''
-  projectFileId.value = r.data?.project_file_id || projectFileId.value
+  projectFileId.value = fileId
   ElMessage.success('文件上传完成')
   emit('completed', {
-    project_file_id: r.data?.project_file_id,
+    project_file_id: fileId,
     storage_path: r.data?.storage_path,
     build_task_id: r.data?.build_task_id
   })
