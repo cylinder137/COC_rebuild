@@ -99,7 +99,7 @@ async function cancel(row) {
     const { value } = await ElMessageBox.prompt(
       `注销后该用户无法登录（作品保留，作者名显示「用户已注销」）。请输入理由：`,
       '注销账号',
-      { inputValidator: (v) => (!!v && v.trim()) || '必须填写理由', confirmButtonClass: 'el-button--danger' }
+      { inputValidator: (v) => !!((v || '').trim()) || '必须填写理由', confirmButtonClass: 'el-button--danger' }
     )
     const r = await safeApi(adminApi.cancelUser(row.user_id, { reason: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }
