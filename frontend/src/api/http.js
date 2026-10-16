@@ -44,13 +44,15 @@ http.interceptors.response.use(
       setToken('')
       if (!redirecting) {
         redirecting = true
+        const base = import.meta.env.BASE_URL || '/'
         const here = window.location.pathname + window.location.search
-        const alreadyLogin = window.location.pathname.startsWith('/login')
+        const loginPath = `${base}login`.replace(/\/{2,}/g, '/')
+        const alreadyLogin = window.location.pathname.startsWith(loginPath)
         ElMessage.warning('登录已失效，请重新登录')
         setTimeout(() => {
           redirecting = false
           // 已经在登录页就不要再跳（避免 ?redirect=/login 自我循环）
-          window.location.href = alreadyLogin ? '/login' : `/login?redirect=${encodeURIComponent(here)}`
+          window.location.href = alreadyLogin ? loginPath : `${loginPath}?redirect=${encodeURIComponent(here)}`
         }, 400)
       }
       return Promise.reject(Object.assign(err, { code: 401, http401: true }))

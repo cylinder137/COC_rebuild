@@ -264,7 +264,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
-import { projectApi, interactApi, userApi, categoryApi, safe } from '@/api'
+import { projectApi, interactApi, userApi, categoryApi, uploadApi, safe } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
@@ -470,10 +470,27 @@ function downloadSource() {
     '下载即表示你已阅读并同意该项目的开源协议，请勿将源码用于商业用途或二次售卖。',
     '下载确认',
     { confirmButtonText: '同意并下载', cancelButtonText: '取消' }
-  ).then(() => {
+  ).then(async () => {
     const f = files.find((x) => x.file_type === 'source') || files[0]
-    ElMessage.success(`开始下载：${f.file_name || '源码'}`)
-    window.open(`${(import.meta.env.VITE_API_BASE || '').replace(/\/api\/v1\/?$/, '')}/api/v1/files/${f.project_file_id}/content`, '_blank')
+    const name = f.file_name || `project-${pid.value}-source.zip`
+    const tip = ElMessage({ message: `正在获取${name}…`, duration: 0 })
+    try {
+      // 用 axios 拉 blob（带上 Authorization 头）；直接 window.open 新标签页发不出登录态，会被后端 401
+      const blob = await uploadApi.fileContent(f.project_file_id)
+      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 15000)
+      tip.close()
+      ElMessage.success(`已开始下载：${name}`)
+    } catch (e) {
+      tip.close()
+      ElMessage.error(e?.message || '下载失败，请重试')
+    }
   }).catch(() => {})
 }
 
