@@ -60,12 +60,13 @@ public class ProjectController {
         return ApiResponse.ok(projectService.stats(projectId, range));
     }
 
-    /** 运行地址（沙箱 iframe 用，返回绝对 URL） */
+    /** 运行地址（沙箱 iframe 用）。url 用相对路径：跟随页面协议/域名，避免 https 页面里嵌 http iframe 被浏览器当混合内容拦掉 */
     @GetMapping("/projects/{project_id}/run")
     public ApiResponse<Map<String, Object>> run(@PathVariable("project_id") long projectId) {
         Map<String, Object> data = projectService.runInfo(projectId);
         String base = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
-        data.put("url", base + "/api/v1/run/" + projectId + "/");
+        data.put("url", "/api/v1/run/" + projectId + "/");
+        data.put("url_absolute", base + "/api/v1/run/" + projectId + "/");
         return ApiResponse.ok(data);
     }
 
