@@ -55,7 +55,7 @@ public class ProjectService {
     /** 封面图上限 5 MB；只收常见图片后缀 */
     private static final long COVER_MAX_BYTES = 5L * 1024 * 1024;
     private static final Set<String> COVER_EXT = Set.of("jpg", "jpeg", "png", "webp", "gif");
-    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     /** 作者（或管理员）上传/更换项目封面：落到 covers/p{项目id}-{时间戳}.{ext}，并写回 project.cover_path */
     @Transactional
@@ -119,12 +119,12 @@ public class ProjectService {
         }
     }
 
-    /** 是否本接口生成的封面文件（p{项目id}-{14位时间戳}.{ext} 且位于 covers 目录内）——只删这种，不碰种子/共享图 */
+    /** 是否本接口生成的封面文件（p{项目id}-{毫秒时间戳}.{ext} 且位于 covers 目录内）——只删这种，不碰种子/共享图 */
     private boolean isGeneratedCover(java.nio.file.Path p, java.nio.file.Path coversDir) {
         if (p == null || p.getParent() == null || !p.getParent().equals(coversDir)) {
             return false;
         }
-        return p.getFileName().toString().matches("^p\\d+-\\d{14}\\.(jpg|jpeg|png|webp|gif)$");
+        return p.getFileName().toString().matches("^p\\d+-\\d{14,17}\\.(jpg|jpeg|png|webp|gif)$");
     }
 
     /** 移除封面（只清库里的 cover_path + 删本接口生成的封面文件） */
