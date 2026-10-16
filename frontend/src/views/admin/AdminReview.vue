@@ -105,7 +105,7 @@ async function reject(row) {
   if (!vid) { ElMessage.warning('缺少版本 ID'); return }
   try {
     const { value } = await ElMessageBox.prompt('请填写驳回原因（会通知作者）', '驳回作品', {
-      inputValidator: (v) => (!!v && v.trim()) || '必须填写原因'
+      inputValidator: (v) => !!((v || '').trim()) || '必须填写原因'
     })
     const r = await safe(adminApi.reject(vid, { reason: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }
@@ -117,7 +117,7 @@ async function reject(row) {
 async function down(row) {
   try {
     const { value } = await ElMessageBox.prompt('请填写下架原因（代码保留在服务器）', '下架作品', {
-      inputValidator: (v) => (!!v && v.trim()) || '必须填写原因'
+      inputValidator: (v) => !!((v || '').trim()) || '必须填写原因'
     })
     const r = await safe(adminApi.down(row.project_id, { reason: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }

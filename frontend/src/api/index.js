@@ -86,7 +86,8 @@ export const adminApi = {
   reports: (params) => http.get('/admin/reports', { params }),
   handleReport: (id, d) => http.post(`/admin/reports/${id}/handle`, d),
   passwordResets: (params) => http.get('/admin/password-resets', { params }),
-  resetPassword: (uid) => http.post(`/admin/users/${uid}/reset-password`),
+  resetPassword: (uid, d) => http.post(`/admin/users/${uid}/reset-password`, d || {}),
+  rejectPasswordReset: (id, d) => http.post(`/admin/password-resets/${id}/reject`, d || {}),
   cancelUser: (uid, d) => http.post(`/admin/users/${uid}/cancel`, d || {}),
   platformStats: () => http.get('/admin/stats/platform')
 }

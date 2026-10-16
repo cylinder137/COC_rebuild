@@ -91,7 +91,7 @@ async function handle(row, action) {
     const { value } = await ElMessageBox.prompt(
       action === 'resolve' ? '处理结果（会通知举报人并加分）' : '驳回理由（会通知举报人）',
       action === 'resolve' ? '受理举报' : '驳回举报',
-      { inputValidator: (v) => (!!v && v.trim()) || '必须填写内容' }
+      { inputValidator: (v) => !!((v || '').trim()) || '必须填写内容' }
     )
     const r = await safe(adminApi.handleReport(row.report_id, { action, result: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }

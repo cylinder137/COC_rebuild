@@ -75,7 +75,7 @@ async function load() {
 async function remove(c) {
   try {
     const { value } = await ElMessageBox.prompt('请填写删除理由（写入审计日志）', '删除评论', {
-      inputValidator: (v) => (!!v && v.trim()) || '必须填写理由'
+      inputValidator: (v) => !!((v || '').trim()) || '必须填写理由'
     })
     const r = await safe(adminApi.removeComment(c.comment_id, { reason: value }))
     if (!r.ok) { ElMessage.error('删除失败'); return }

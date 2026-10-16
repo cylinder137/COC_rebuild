@@ -416,6 +416,40 @@ public class AdminService {
         return data;
     }
 
+    /** 驳回找回密码申请：保留申请记录（status=2 + 驳回理由），有对应用户时通知他 */
+    @Transactional
+    public Map<String, Object> rejectPasswordReset(long applyId, String reason, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        Map<String, Object> apply = passwordResetMapper.findApply(applyId);
+        if (apply == null) {
+            throw BizException.notFound("申请不存在");
+        }
+        int st = apply.get("status") == null ? 0 : ((Number) apply.get("status")).intValue();
+        if (st != 0) {
+            throw BizException.badRequest("该申请已处理，不能重复操作");
+        }
+        String r = (reason == null || reason.trim().isEmpty()) ? "信息不足，无法核实身份" : reason.trim();
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("apply_id", applyId);
+        p.put("reject_reason", r);
+        p.put("handled_by", adminId);
+        passwordResetMapper.markRejected(p);
+        String qq = apply.get("qq_account") == null ? null : String.valueOf(apply.get("qq_account"));
+        Map<String, Object> applicant = qq == null ? null : userMapper.findByQq(qq);
+        if (applicant != null && applicant.get("user_id") != null) {
+            long uid = ((Number) applicant.get("user_id")).longValue();
+            notify(uid, "system", "密码找回申请未通过",
+                    "原因：" + r + "。请补充能证明账号归属的信息后重新提交。", "/forgot");
+        }
+        audit(adminId, "reject_password_reset", "password_reset_apply", applyId,
+                "驳回找回密码申请：" + r, ip);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("apply_id", applyId);
+        data.put("status", 2);
+        data.put("reject_reason", r);
+        return data;
+    }
+
     /** 注销账号：status=3 软删；作品保留，作者名回退「用户已注销」 */
     @Transactional
     public Map<String, Object> cancelAccount(long userId, String reason, String ip) {

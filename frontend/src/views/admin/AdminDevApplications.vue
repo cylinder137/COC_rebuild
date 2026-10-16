@@ -89,7 +89,7 @@ async function approve(row) {
 async function reject(row) {
   try {
     const { value } = await ElMessageBox.prompt('驳回理由（会通知申请人）', '驳回申请', {
-      inputValidator: (v) => (!!v && v.trim()) || '必须填写理由'
+      inputValidator: (v) => !!((v || '').trim()) || '必须填写理由'
     })
     const r = await safe(adminApi.rejectDev(row.developer_profile_id || row.user_id, { reason: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }

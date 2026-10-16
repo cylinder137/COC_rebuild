@@ -101,7 +101,7 @@ async function load() {
 async function down(row) {
   try {
     const { value } = await ElMessageBox.prompt('下架原因（代码保留）', '下架', {
-      inputValidator: (v) => (!!v && v.trim()) || '必须填写原因'
+      inputValidator: (v) => !!((v || '').trim()) || '必须填写原因'
     })
     const r = await safe(adminApi.down(row.project_id, { reason: value }))
     if (!r.ok) { ElMessage.error('操作失败'); return }

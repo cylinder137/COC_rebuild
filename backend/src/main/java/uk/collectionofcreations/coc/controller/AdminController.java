@@ -152,6 +152,15 @@ public class AdminController {
         return ApiResponse.ok(adminService.passwordResets(query));
     }
 
+    /** 驳回找回密码申请（保留申请记录，状态置 2 已驳回，通知申请人） */
+    @PostMapping("/password-resets/{apply_id}/reject")
+    public ApiResponse<Map<String, Object>> rejectPasswordReset(@PathVariable("apply_id") long applyId,
+                                                                @RequestBody(required = false) Map<String, Object> body,
+                                                                HttpServletRequest request) {
+        return ApiResponse.ok(adminService.rejectPasswordReset(applyId,
+                body == null ? null : Params.str(body, "reason"), FileController.clientIp(request)));
+    }
+
     /** 生成一次性临时密码（24h 有效，首登强制改密，旧 token 立即失效） */
     @PostMapping("/users/{user_id}/reset-password")
     public ApiResponse<Map<String, Object>> resetPassword(@PathVariable("user_id") long userId,
