@@ -454,6 +454,9 @@ public class AdminService {
     @Transactional
     public Map<String, Object> cancelAccount(long userId, String reason, String ip) {
         long adminId = AuthContext.requireAdmin();
+        if (userId == adminId) {
+            throw BizException.badRequest("不能注销当前登录的管理员账号");
+        }
         Map<String, Object> user = userMapper.findAuthById(userId);
         if (user == null) {
             throw BizException.notFound("用户不存在");

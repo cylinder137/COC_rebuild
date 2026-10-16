@@ -82,4 +82,24 @@ router.beforeEach((to) => {
   return true
 })
 
+/* 打包产物更新后，旧页面懒加载的 chunk 会 404（点击 tab 无反应 / 白屏）。
+   这里统一兜住：遇到「动态导入失败」就整页刷新一次，拿到新版本。 */
+let reloading = false
+function reloadOnce() {
+  if (reloading) return
+  reloading = true
+  window.location.reload()
+}
+router.onError((err, to) => {
+  const msg = String(err?.message || err || '')
+  if (/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg)) {
+    reloadOnce()
+    return
+  }
+  console.error('[coc] router error:', err, to?.fullPath)
+})
+if (typeof window !== 'undefined') {
+  window.addEventListener('vite:preloadError', (e) => { e.preventDefault?.(); reloadOnce() })
+}
+
 export default router

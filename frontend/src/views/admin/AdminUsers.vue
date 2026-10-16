@@ -57,13 +57,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import http, { safe } from '@/api/http'
 import { adminApi, safe as safeApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime, pickList, pickTotal } from '@/utils/format'
 
+const auth = useAuthStore()
 const list = ref([])
 const loading = ref(false)
 const error = ref(null)
 const dialog = ref(false)
 const tempPw = ref('')
+
+/** 当前登录管理员自己的 user_id（防止对自己做危险操作 → 自锁） */
+function myUserId() { return auth.user?.user_id || null }
+function isSelf(row) { return !!myUserId() && row?.user_id === myUserId() }
 
 function statusLabel(s) {
   return { 0: '待审', 1: '正常', 2: '禁用', 3: '已注销' }[s] || '未知'
@@ -85,6 +91,13 @@ async function load() {
 
 async function resetPw(row) {
   try {
+    if (isSelf(row)) {
+      await ElMessageBox.confirm(
+        '你要重置的是【自己】的密码：操作成功后当前登录会立即失效（需要拿新临时密码重新登录，且首登必须改密）。确定继续？',
+        '⚠️ 正在重置自己的密码',
+        { type: 'warning', confirmButtonText: '仍要重置', cancelButtonText: '取消' }
+      )
+    }
     await ElMessageBox.confirm(`为 QQ ${row.qq_account} 生成一次性临时密码？`, '重置密码', { type: 'warning' })
     const r = await safeApi(adminApi.resetPassword(row.user_id))
     if (!r.ok) { ElMessage.error('操作失败'); return }
@@ -96,6 +109,10 @@ async function resetPw(row) {
 
 async function cancel(row) {
   try {
+    if (isSelf(row)) {
+      ElMessage.warning('不能注销当前登录的管理员账号（会把自己锁在门外）')
+      return
+    }
     const { value } = await ElMessageBox.prompt(
       `注销后该用户无法登录（作品保留，作者名显示「用户已注销」）。请输入理由：`,
       '注销账号',
