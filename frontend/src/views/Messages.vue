@@ -17,7 +17,7 @@
         :error="convError"
         :empty="!loadingConvs && !convError && !convs.length"
         empty-text="暂无会话"
-        empty-desc="在项目详情页发起讨论，或由管理员拉你进项目群。"
+        empty-desc="去某个用户的个人主页或作品页点「私聊」就能开启单聊；项目群由管理员拉入。"
         :skeleton-count="4"
         @retry="loadConvs"
       >
@@ -30,12 +30,12 @@
             @click="openConv(c)"
           >
             <div class="ci-avatar">
-              <el-avatar :size="38" :src="c.avatar_path">{{ (c.title || 'U').slice(0, 1) }}</el-avatar>
-              <el-badge v-if="c.unread" :value="c.unread" :max="99" class="ci-badge" />
+              <el-avatar :size="38" :src="convAvatar(c)">{{ convTitle(c).slice(0, 1) }}</el-avatar>
+              <el-badge v-if="convUnread(c)" :value="convUnread(c)" :max="99" class="ci-badge" />
             </div>
             <div class="grow">
               <div class="row between center gap8">
-                <span class="ci-title ellipsis">{{ c.title || c.nickname || '会话' }}</span>
+                <span class="ci-title ellipsis">{{ convTitle(c) }}</span>
                 <span class="xs dim">{{ c.last_message_at ? fmtTime(c.last_message_at) : '' }}</span>
               </div>
               <div class="xs dim ellipsis">
@@ -54,7 +54,7 @@
       <template v-if="active">
         <div class="chat-hd">
           <el-button class="hide-lg" text @click="active = null"><el-icon><Back /></el-icon></el-button>
-          <span class="ch-title">{{ active.title || active.nickname || '会话' }}</span>
+          <span class="ch-title">{{ convTitle(active) }}</span>
           <el-tag v-if="active.kind === 2" size="small" effect="plain" type="primary">项目群</el-tag>
           <span class="grow" />
           <el-button text size="small" @click="loadMessages(true)">
@@ -68,11 +68,11 @@
             没有更早的消息了
           </div>
           <div v-if="!messages.length && !loadingMsgs" class="empty-chat xs dim">还没有消息，打个招呼吧 👋</div>
-          <div v-for="m in messages" :key="m.im_message_id || m.client_msg_id" class="bubble-row" :class="{ mine: m.sender_id === myId }">
-            <el-avatar :size="28" :src="m.sender?.avatar_path">{{ (m.sender?.nickname || 'U').slice(0, 1) }}</el-avatar>
+          <div v-for="m in messages" :key="m.im_message_id || m.client_msg_id" class="bubble-row" :class="{ mine: String(m.sender_id) === String(myId) }">
+            <el-avatar :size="28" :src="senderAvatar(m)">{{ senderName(m).slice(0, 1) }}</el-avatar>
             <div class="bubble-wrap">
               <div class="xs dim bubble-meta">
-                {{ m.sender?.nickname || '用户' }} · {{ fmtTime(m.created_at) }}
+                {{ senderName(m) }} · {{ fmtTime(m.created_at) }}
               </div>
               <div class="bubble">{{ m.content }}</div>
             </div>
@@ -92,13 +92,13 @@
         <el-icon :size="42" class="dim"><ChatDotRound /></el-icon>
         <div class="dim">选择左侧会话开始聊天</div>
         <div class="xs dim">支持单聊与项目群；每页 20 条，滚动到顶部自动加载更早消息</div>
-      </div>
-    </section>
+      </div>    </section>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import { imApi, safe, WS_BASE, getToken } from '@/api'
@@ -106,8 +106,21 @@ import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { fmtTime, pickList } from '@/utils/format'
 
+const route = useRoute()
 const auth = useAuthStore()
 const ui = useUiStore()
+
+/* ---------- 后端会话/消息字段归一化（display_title / unread_count / sender_nickname…） ---------- */
+function sid(c) { return c?.im_session_id ?? c?.id }
+function convTitle(c) {
+  if (!c) return '会话'
+  if (c.kind === 2) return c.title || c.display_title || '项目群'
+  return c.display_title || c.title || c.nickname || `用户 ${c.peer_user_id ?? ''}`.trim()
+}
+function convAvatar(c) { return c?.display_avatar || c?.avatar_path || '' }
+function convUnread(c) { return Number(c?.unread_count ?? c?.unread ?? 0) }
+function senderName(m) { return m?.sender_nickname || m?.sender?.nickname || '用户' }
+function senderAvatar(m) { return m?.sender_avatar || m?.sender?.avatar_path || '' }
 
 const convs = ref([])
 const tab = ref('')
@@ -170,13 +183,16 @@ function fallbackPolling(msg) {
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
 
 function onIncoming(sessionId, msg) {
-  if (active.value && String(sessionId) === String(active.value.im_session_id || active.value.id)) {
+  if (active.value && String(sessionId) === String(sid(active.value))) {
     messages.value.push(msg)
     nextTick(scrollBottom)
-    imApi.read(active.value.kind, active.value.im_session_id || active.value.id).catch(() => {})
+    imApi.read(sid(active.value)).catch(() => {})
+    const c = convs.value.find((x) => String(sid(x)) === String(sessionId))
+    if (c) c.last_message_preview = msg.content
   } else {
-    const c = convs.value.find((x) => String(x.im_session_id || x.id) === String(sessionId))
-    if (c) c.unread = (c.unread || 0) + 1
+    const c = convs.value.find((x) => String(sid(x)) === String(sessionId))
+    if (c) c.unread_count = convUnread(c) + 1
+    else loadConvs(true)
     ui.unreadTotal += 1
   }
 }
@@ -184,7 +200,7 @@ function onIncoming(sessionId, msg) {
 /* ---------- 会话 ---------- */
 const filteredConvs = computed(() => (tab.value ? convs.value.filter((c) => String(c.kind) === tab.value) : convs.value))
 
-function keyOf(c) { return `${c.kind}-${c.im_session_id || c.id}` }
+function keyOf(c) { return String(sid(c)) }
 function isActive(c) { return active.value && keyOf(active.value) === keyOf(c) }
 
 async function loadConvs(silent) {
@@ -198,21 +214,32 @@ async function loadConvs(silent) {
 
 async function openConv(c) {
   active.value = c
-  c.unread = 0
+  c.unread_count = 0
   cursor.value = null
   hasMore.value = true
   await loadMessages(true)
-  imApi.read(c.kind, c.im_session_id || c.id).catch(() => {})
+  imApi.read(sid(c)).catch(() => {})
+}
+
+/** 按会话 id 选中；不在列表里（比如刚由「私聊」建好）就先刷新列表 */
+async function selectSession(sessionId) {
+  if (!sessionId) return
+  let c = convs.value.find((x) => String(sid(x)) === String(sessionId))
+  if (!c) {
+    await loadConvs(true)
+    c = convs.value.find((x) => String(sid(x)) === String(sessionId))
+  }
+  if (!c) { ElMessage.warning('会话不存在或你还不是成员'); return }
+  await openConv(c)
 }
 
 /** cursor 分页，每页 20 条 */
 async function loadMessages(reset) {
   if (!active.value) return
   if (reset) { messages.value = []; cursor.value = null; hasMore.value = true; loadingMsgs.value = true }
-  const id = active.value.im_session_id || active.value.id
-  const params = { limit: 20 }
+  const params = {}
   if (!reset && cursor.value) params.cursor = cursor.value
-  const r = await safe(imApi.messages(active.value.kind, id, params))
+  const r = await safe(imApi.messages(sid(active.value), params))
   loadingMsgs.value = false
   loadingMore.value = false
   if (!r.ok) return
@@ -247,14 +274,13 @@ async function send() {
   if (!content || !active.value) return
   sending.value = true
   const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const id = active.value.im_session_id || active.value.id
-  const r = await safe(imApi.send(active.value.kind, id, { content, client_msg_id: clientMsgId }))
+  const r = await safe(imApi.send(sid(active.value), { content, client_msg_id: clientMsgId }))
   sending.value = false
   if (!r.ok) { ElMessage.error('发送失败，请稍后重试'); return }
   draft.value = ''
   const saved = r.data?.message || r.data
   if (saved && typeof saved === 'object' && saved.content) messages.value.push(saved)
-  else messages.value.push({ im_message_id: clientMsgId, sender_id: myId.value, sender: auth.user, content, created_at: new Date().toISOString() })
+  else messages.value.push({ im_message_id: clientMsgId, sender_id: myId.value, sender_nickname: auth.user?.nickname, content, created_at: new Date().toISOString() })
   await nextTick(); scrollBottom()
 }
 
@@ -263,8 +289,12 @@ function onResize() { isNarrow.value = window.innerWidth < 992 }
 onMounted(async () => {
   window.addEventListener('resize', onResize)
   await loadConvs()
+  await selectSession(route.query.session)
   connectWs()
 })
+
+/* 从别人主页/作品页点「私聊」跳过来：?session=<id> */
+watch(() => route.query.session, (v) => { if (v) selectSession(v) })
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
   stopPolling()

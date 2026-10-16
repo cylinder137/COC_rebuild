@@ -206,7 +206,7 @@ public class ImService {
             n.put("type", "im");
             n.put("title", senderName + " 给你发了一条消息");
             n.put("content", String.valueOf(message.get("content")));
-            n.put("link", "/im/" + sessionId);
+            n.put("link", "/messages?session=" + sessionId);
             notificationMapper.insert(n);
         }
     }

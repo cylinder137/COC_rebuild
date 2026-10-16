@@ -205,6 +205,14 @@
                 >
                   {{ following ? '已关注' : '+ 关注' }}
                 </el-button>
+                <el-button
+                  v-if="!isAuthorMe"
+                  style="width:100%;margin:8px 0 0"
+                  :loading="chatting"
+                  @click="openChatWithAuthor"
+                >
+                  <el-icon><ChatDotRound /></el-icon>&nbsp;私聊作者
+                </el-button>
               </div>
 
               <div class="card">
@@ -264,7 +272,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
-import { projectApi, interactApi, userApi, categoryApi, uploadApi, safe } from '@/api'
+import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
@@ -286,6 +294,7 @@ const isFull = ref(false)
 const liked = ref(false)
 const favorited = ref(false)
 const following = ref(false)
+const chatting = ref(false)
 const likeCount = ref(0)
 const favCount = ref(0)
 const categories = ref([])
@@ -415,6 +424,25 @@ function requireLogin(reason) {
   if (auth.isLoggedIn) return false
   ui.promptLogin(reason || '该操作需要登录', route.fullPath)
   return true
+}
+
+/** 当前登录者就是作者本人？（是的话不显示「私聊作者」） */
+const isAuthorMe = computed(() => {
+  const mine = auth.user?.user_id
+  const aid = detail.value?.author?.user_id
+  return !!mine && !!aid && String(mine) === String(aid)
+})
+
+/** 私聊作者：打开/复用单聊会话并跳转消息页 */
+async function openChatWithAuthor() {
+  const aid = detail.value?.author?.user_id
+  if (!aid) { ElMessage.warning('作者信息不完整'); return }
+  if (requireLogin('私聊需要登录')) return
+  chatting.value = true
+  const r = await safe(imApi.openDirect({ user_id: Number(aid) }))
+  chatting.value = false
+  if (!r.ok) { ElMessage.error(r.error?.message || '打开会话失败，请稍后重试'); return }
+  router.push({ name: 'messages', query: { session: r.data?.im_session_id } })
 }
 
 async function toggleLike() {

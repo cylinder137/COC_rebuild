@@ -17,12 +17,17 @@
                 <span class="num">{{ user.project_count ?? published.length }}</span> 件作品
               </div>
             </div>
-            <el-button
-              v-if="!isSelf"
-              :type="following ? 'default' : 'primary'"
-              @click="toggleFollow"
-            >{{ following ? '已关注' : '+ 关注' }}</el-button>
-            <router-link v-else to="/me/projects"><el-button>我的作品</el-button></router-link>
+            <div class="acts">
+              <el-button v-if="!isSelf" :loading="chatting" @click="openChat">
+                <el-icon><ChatDotRound /></el-icon>&nbsp;私聊
+              </el-button>
+              <el-button
+                v-if="!isSelf"
+                :type="following ? 'default' : 'primary'"
+                @click="toggleFollow"
+              >{{ following ? '已关注' : '+ 关注' }}</el-button>
+              <router-link v-else to="/me/projects"><el-button>我的作品</el-button></router-link>
+            </div>
           </div>
 
           <!-- 作品列表 -->
@@ -48,16 +53,17 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import ProjectCard from '@/components/ProjectCard.vue'
-import { userApi, interactApi, safe } from '@/api'
+import { userApi, interactApi, imApi, safe } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { pickList } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const ui = useUiStore()
 
@@ -65,6 +71,7 @@ const user = ref(null)
 const published = ref([])
 const followers = ref(0)
 const following = ref(false)
+const chatting = ref(false)
 const loading = ref(false)
 const error = ref(null)
 
@@ -96,12 +103,25 @@ async function toggleFollow() {
   ElMessage.success(following.value ? '已关注' : '已取消关注')
 }
 
+/** 私聊：打开/复用与该用户的单聊会话，然后跳到消息页并选中它 */
+async function openChat() {
+  if (isSelf.value) return
+  if (!auth.isLoggedIn) { ui.promptLogin('私聊需要登录', route.fullPath); return }
+  if (user.value?.status === 3) { ElMessage.warning('该用户已注销，无法私聊'); return }
+  chatting.value = true
+  const r = await safe(imApi.openDirect({ user_id: Number(route.params.id) }))
+  chatting.value = false
+  if (!r.ok) { ElMessage.error(r.error?.message || '打开会话失败，请稍后重试'); return }
+  router.push({ name: 'messages', query: { session: r.data?.im_session_id } })
+}
+
 watch(() => route.params.id, load)
 onMounted(load)
 </script>
 
 <style scoped>
 .head { display: flex; align-items: center; gap: 20px; padding: 24px; flex-wrap: wrap; }
+.acts { display: flex; gap: 10px; align-items: center; }
 .u-name { font-size: var(--fs-h1); font-weight: 700; margin: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 </style>

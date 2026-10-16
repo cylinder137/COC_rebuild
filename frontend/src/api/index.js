@@ -64,9 +64,11 @@ export const uploadApi = {
 /* ================= 3.5 私信 / 项目群 ================= */
 export const imApi = {
   conversations: () => http.get('/im/conversations'),
-  messages: (kind, id, params) => http.get(`/im/conversations/${kind}/${id}/messages`, { params }),
-  send: (kind, id, d) => http.post(`/im/conversations/${kind}/${id}/messages`, d),
-  read: (kind, id) => http.post(`/im/conversations/${kind}/${id}/read`, null, { silent: true }),
+  // 打开/创建与某人的单聊会话，body: { user_id }
+  openDirect: (d) => http.post('/im/conversations/direct', d || {}),
+  messages: (sid, params) => http.get(`/im/conversations/${sid}/messages`, { params }),
+  send: (sid, d) => http.post(`/im/conversations/${sid}/messages`, d),
+  read: (sid) => http.post(`/im/conversations/${sid}/read`, null, { silent: true }),
   unread: () => http.get('/im/unread', { silent: true })
 }
 
