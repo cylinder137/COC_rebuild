@@ -3,7 +3,7 @@
     <div class="row between center wrap gap12" style="margin-bottom:20px">
       <div>
         <h2 class="section-title" style="margin:0">审核队列</h2>
-        <div class="sm dim">默认只显示需人工审核的 HTML / zip 待审项；Scratch 与结构文件免审不进队列</div>
+        <div class="sm dim">默认只显示需人工审核的 HTML / zip 待审项；Scratch 与结构文件免审不进队列。驳回 = 直接删除该作品及其服务器代码文件（不保留审核记录）</div>
       </div>
       <div class="row center gap12">
         <el-checkbox v-model="showAuto" @change="load">显示免审类型</el-checkbox>
@@ -43,7 +43,7 @@
           <template #default="{ row }">
             <el-button size="small" text @click="viewStorage(row)">存储路径</el-button>
             <el-button v-if="row.status !== 2" size="small" type="success" text @click="approve(row)">通过</el-button>
-            <el-button v-if="row.status !== 2" size="small" type="danger" text @click="reject(row)">驳回</el-button>
+            <el-button v-if="row.status !== 2" size="small" type="danger" text @click="reject(row)">驳回并删除</el-button>
             <el-button v-if="row.status === 2" size="small" type="danger" text @click="down(row)">下架</el-button>
           </template>
         </el-table-column>
@@ -92,24 +92,31 @@ async function load() {
 }
 
 async function approve(row) {
-  const vid = row.current_version_id || row.project_version_id
-  if (!vid) { ElMessage.warning('缺少版本 ID（后端详情未返回 project_version_id），请到项目管理页操作'); return }
+  const vid = row.latest_version_id || row.current_version_id || row.project_version_id
+  if (!vid) { ElMessage.warning('缺少版本 ID（后端未返回 latest_version_id），请到项目管理页操作'); return }
   const r = await safe(adminApi.approve(vid, {}))
   if (!r.ok) { ElMessage.error('操作失败'); return }
   ElMessage.success('已通过审核，作品已公开')
   load()
 }
 
+/** 驳回 = 直接删除被驳回的作品（含服务器上的代码文件），不保留审核记录 */
 async function reject(row) {
-  const vid = row.current_version_id || row.project_version_id
-  if (!vid) { ElMessage.warning('缺少版本 ID'); return }
   try {
-    const { value } = await ElMessageBox.prompt('请填写驳回原因（会通知作者）', '驳回作品', {
-      inputValidator: (v) => !!((v || '').trim()) || '必须填写原因'
-    })
-    const r = await safe(adminApi.reject(vid, { reason: value }))
+    const { value } = await ElMessageBox.prompt(
+      '驳回原因（会通知作者）。注意：驳回将直接删除该作品及服务器上的代码文件，不可恢复。',
+      '驳回并删除作品',
+      {
+        inputType: 'textarea',
+        inputPlaceholder: '例如：含站外跳转 / 存在安全风险 / 不符合投稿规范',
+        inputValidator: (v) => !!((v || '').trim()) || '必须填写原因',
+        confirmButtonText: '驳回并删除',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    const r = await safe(adminApi.removeProject(row.project_id, { reason: value.trim() }))
     if (!r.ok) { ElMessage.error('操作失败'); return }
-    ElMessage.success('已驳回')
+    ElMessage.success(r.data?.storage_removed === false ? '已驳回并删除（代码目录原本不存在）' : '已驳回并删除')
     load()
   } catch (e) {}
 }

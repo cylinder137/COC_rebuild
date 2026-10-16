@@ -125,7 +125,7 @@ public class AdminService {
         return data;
     }
 
-    /** 审核驳回：status 1 → 4 */
+    /** 审核驳回：直接删除被驳回的作品（软删 DB + 物理删除服务器代码目录），不保留审核记录 */
     @Transactional
     public Map<String, Object> reject(long projectVersionId, String reason, String ip) {
         long adminId = AuthContext.requireAdmin();
@@ -135,18 +135,27 @@ public class AdminService {
         }
         long projectId = ((Number) version.get("project_id")).longValue();
         Map<String, Object> project = projectMapper.findProjectById(projectId);
+        String r = (reason == null || reason.trim().isEmpty()) ? "不符合投稿规范" : reason.trim();
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("project_id", projectId);
-        p.put("reason", reason == null ? "不符合投稿规范" : reason);
-        projectMapper.rejectProject(p);
-        insertReview(projectVersionId, adminId, "reject", reason);
-        notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品未通过审核",
-                "《" + project.get("title") + "》驳回原因：" + p.get("reason"), "/project/" + projectId);
-        audit(adminId, "reject_project", "project", projectId, "驳回：" + p.get("reason"), ip);
+        p.put("reason", r);
+        projectMapper.softDeleteProject(p);
+        Path dir = storageService.projectRootDir(projectId);
+        boolean existed = Files.exists(dir);
+        storageService.deleteRecursively(dir);
+        if (project != null) {
+            notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品未通过审核",
+                    "《" + project.get("title") + "》未通过审核，已删除。原因：" + r, "/me/projects");
+            audit(adminId, "reject_project_deleted", "project", projectId,
+                    "驳回即删除：《" + project.get("title") + "》原因：" + r
+                            + "，代码目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
+        }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 4);
-        data.put("reject_reason", p.get("reason"));
+        data.put("deleted", true);
+        data.put("storage_removed", existed);
+        data.put("reject_reason", r);
         return data;
     }
 

@@ -125,6 +125,8 @@ public interface ProjectMapper {
             + "SELECT p.project_id, p.title, p.summary, p.project_type, p.category_id, p.status, p.audit_mode, "
             + "p.is_deleted, p.reject_reason, p.down_reason, p.delete_reason, p.author_id, p.view_count_total, "
             + "p.like_count, p.comment_count, p.favorite_count, p.published_at, p.created_at, p.updated_at, "
+            + "(SELECT pv.project_version_id FROM project_version pv WHERE pv.project_id = p.project_id "
+            + " ORDER BY pv.version_no DESC LIMIT 1) AS latest_version_id, "
             + "CASE WHEN u.status = 3 THEN '用户已注销' ELSE u.nickname END AS author_nickname, u.qq_account AS author_qq "
             + "FROM project p JOIN `user` u ON u.user_id = p.author_id WHERE 1 = 1 "
             + "<if test='status != null'> AND p.status = #{status}</if>"
