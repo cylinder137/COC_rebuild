@@ -119,6 +119,7 @@ public class AdminService {
         notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品已通过审核",
                 "《" + project.get("title") + "》已发布", "/project/" + projectId);
         audit(adminId, "approve_project", "project", projectId, "通过审核，版本 " + version.get("version_no"), ip);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 2);
@@ -154,6 +155,7 @@ public class AdminService {
         audit(adminId, "reject_project_deleted", "project", projectId,
                 "驳回即删除：《" + project.get("title") + "》原因：" + r
                         + "，代码目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 4);
@@ -176,6 +178,7 @@ public class AdminService {
             insertReview(((Number) version.get("project_version_id")).longValue(), adminId, "down", reason);
         }
         audit(adminId, "down_project", "project", projectId, "下架：" + p.get("reason"), ip);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 3);
@@ -188,6 +191,7 @@ public class AdminService {
         requireProject(projectId);
         projectMapper.restoreProject(projectId);
         audit(adminId, "restore_project", "project", projectId, "恢复上架", ip);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 2);
@@ -208,6 +212,7 @@ public class AdminService {
         storageService.deleteRecursively(dir);
         audit(adminId, "delete_project", "project", projectId,
                 "删除项目《" + project.get("title") + "》，物理目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("deleted", true);

@@ -111,6 +111,7 @@ public class ProjectService {
             data.put("project_id", projectId);
             data.put("cover_path", "covers/" + name);
             data.put("cover_url", "/covers/" + name);
+            HotCache.invalidate("projects:");
             data.put("file_name", name);
             data.put("size", file.getSize());
             return data;
@@ -151,6 +152,7 @@ public class ProjectService {
             }
         }
         projectMapper.clearCover(projectId);
+        HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("cover_path", null);
@@ -165,6 +167,14 @@ public class ProjectService {
         Map<String, Object> q = new LinkedHashMap<>(query);
         q.put("limit", size);
         q.put("offset", Params.offset(page, size));
+        // 首页作品流 / 排行榜是典型的读多写少：内存缓存 20 秒（投稿/审核/删除时会主动失效）
+        String cacheKey = "projects:list:" + page + ":" + size + ":" + q.toString();
+        Object cached = HotCache.get(cacheKey);
+        if (cached instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> hit = (Map<String, Object>) cached;
+            return hit;
+        }
         List<Map<String, Object>> list = projectMapper.listPublished(q);
         long total = projectMapper.countPublished(q);
         Map<String, Object> data = new LinkedHashMap<>();
@@ -172,6 +182,7 @@ public class ProjectService {
         data.put("total", total);
         data.put("page", page);
         data.put("size", size);
+        HotCache.put(cacheKey, data, 20_000L);
         return data;
     }
 
@@ -437,6 +448,8 @@ public class ProjectService {
             data.put("audit_mode", "manual");
             data.put("message", "已提交审核，等待管理员处理");
         }
+        // 首页/排行缓存立即失效，作者刷新就能看到自己的新作品
+        HotCache.invalidate("projects:");
         return data;
     }
 
