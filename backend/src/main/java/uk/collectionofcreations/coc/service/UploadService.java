@@ -309,6 +309,20 @@ public class UploadService {
         projectMapper.insertFile(file);
         long projectFileId = ((Number) file.get("project_file_id")).longValue();
 
+        // 已发布项目上传了新版本：内容已变，必须重新过审（2026-10-17 修复 L-1）
+        // 例外：scratch（打包免审）与 audit_mode=auto（免审类型）
+        try {
+            Object pst = project.get("status");
+            String auditMode = String.valueOf(project.get("audit_mode"));
+            boolean exempt = scratch || "auto".equalsIgnoreCase(auditMode);
+            if (pst != null && ((Number) pst).intValue() == 2 && !exempt) {
+                projectMapper.submitForReview(projectId);
+                log.info("项目 {} 上传新版本 v{}：已回退为待审，审核通过前不对公众开放", projectId, versionNo);
+            }
+        } catch (Exception e) {
+            log.warn("回退待审状态失败 project_id={}: {}", projectId, e.getMessage());
+        }
+
         // html 且是 zip：解压到 source 目录，便于沙箱直接运行
         if ("html".equals(projectType) && fileName.toLowerCase().endsWith(".zip")) {
             try {

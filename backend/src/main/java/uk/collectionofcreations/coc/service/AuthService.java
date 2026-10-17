@@ -52,6 +52,19 @@ public class AuthService {
         if (nickname.length() > 50) {
             throw BizException.badRequest("昵称过长");
         }
+        if (nickname.length() < 1) {
+            throw BizException.badRequest("昵称不能为空");
+        }
+        // 昵称禁止 HTML 元字符与控制字符（防储存型 XSS，2026-10-17 修复 H-2）
+        if (nickname.matches(".*[<>\u0000-\u001f\u007f].*")) {
+            throw BizException.badRequest("昵称不能包含 < > 等特殊符号");
+        }
+        if (contact != null && contact.length() > 100) {
+            throw BizException.badRequest("联系方式过长（最多 100 字）");
+        }
+        if (contact != null && contact.matches(".*[\u0000-\u001f\u007f].*")) {
+            throw BizException.badRequest("联系方式包含非法字符");
+        }
         if (userMapper.countByQq(qq) > 0) {
             throw new BizException(1002, "该 QQ 号已提交过申请或已注册", 409);
         }

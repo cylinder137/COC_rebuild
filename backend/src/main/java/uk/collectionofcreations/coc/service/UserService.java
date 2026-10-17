@@ -31,6 +31,7 @@ public class UserService {
         if (user == null) {
             throw BizException.notFound("用户不存在");
         }
+        requireVisible(user, userId);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("user_id", user.get("user_id"));
         data.put("nickname", user.get("display_name"));
@@ -52,11 +53,29 @@ public class UserService {
         if (user == null) {
             throw BizException.notFound("用户不存在");
         }
+        requireVisible(user, userId);
         Long me = AuthContext.userId();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("user_id", userId);
         data.put("following", me != null && interactionMapper.findFollow(me, userId) != null);
         data.put("followers", interactionMapper.countFollowers(userId));
         return data;
+    }
+
+    /**
+     * 账号可见性：只有「正常(1)」与「已注销(3)」对外可见；待审(0)/禁用(2) 仅本人与管理员可见。
+     * 2026-10-17 修复 H-2（待审账号被公开访问）。
+     */
+    private void requireVisible(Map<String, Object> user, long userId) {
+        Object st = user.get("status");
+        int status = st == null ? 1 : ((Number) st).intValue();
+        if (status == 1 || status == 3) {
+            return;
+        }
+        Long me = AuthContext.userId();
+        boolean self = me != null && me.longValue() == userId;
+        if (!self && !AuthContext.isAdmin()) {
+            throw BizException.notFound("用户不存在");
+        }
     }
 }

@@ -60,11 +60,17 @@ public class FileService {
     }
 
     /** 运行目录：优先 build（打包产物），否则 source */
+    /** 运行目录：优先 build（打包产物），否则 source。含发布 / 审核门禁（2026-10-17 修复 L-1） */
     public Path resolveRunRoot(long projectId) {
+        Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null) {
+            throw BizException.notFound("项目不存在");
+        }
         Map<String, Object> version = projectMapper.findLatestVersion(projectId);
         if (version == null) {
             throw BizException.notFound("项目还没有上传文件");
         }
+        requireRunnable(project, version);
         int versionNo = ((Number) version.get("version_no")).intValue();
         Path base = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId)).resolve("v" + versionNo);
         Path build = base.resolve("build");
@@ -76,6 +82,54 @@ public class FileService {
             return source;
         }
         throw BizException.notFound("项目运行目录不存在");
+    }
+
+    /**
+     * 运行门禁：
+     * <ul>
+     *   <li>作者本人 / 管理员：任何状态都能预览（含未过审），便于自查；</li>
+     *   <li>其他人：项目必须未删除且「已发布(2)」，并且<b>最新版本已过审</b>。</li>
+     * </ul>
+     * 「最新版本已过审」判定：该版本存在 approve 审核记录（按最新一条判定）；若无任何审核记录
+     * （历史 / 种子数据），则以「已发布」兜底放行，避免误伤既有作品。
+     */
+    private void requireRunnable(Map<String, Object> project, Map<String, Object> version) {
+        Long me = AuthContext.userId();
+        long authorId = ((Number) project.get("author_id")).longValue();
+        boolean owner = me != null && me.longValue() == authorId;
+        boolean admin = AuthContext.isAdmin();
+        if (owner || admin) {
+            return;
+        }
+        int status = ((Number) project.get("status")).intValue();
+        int deleted = ((Number) project.get("is_deleted")).intValue();
+        if (deleted == 1 || status != 2) {
+            throw BizException.notFound("项目不存在或尚未发布");
+        }
+        if (!versionApproved(version)) {
+            throw BizException.notFound("该项目的新版本正在审核中，暂不可运行");
+        }
+    }
+
+    private boolean versionApproved(Map<String, Object> version) {
+        Object versionId = version.get("project_version_id");
+        if (versionId == null) {
+            return true;
+        }
+        java.util.List<Map<String, Object>> reviews = projectMapper.listReviews(((Number) versionId).longValue());
+        if (reviews == null || reviews.isEmpty()) {
+            return true; // 历史 / 种子数据：没有审核记录，按已发布放行
+        }
+        for (Map<String, Object> r : reviews) {
+            String action = String.valueOf(r.get("action"));
+            if ("approve".equalsIgnoreCase(action)) {
+                return true;
+            }
+            if ("down".equalsIgnoreCase(action) || "reject".equalsIgnoreCase(action)) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**
