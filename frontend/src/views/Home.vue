@@ -23,6 +23,9 @@
     </section>
 
     <div class="container">
+      <!-- 造物集其他业务（家教平台 / WebSocket 同步 等兄弟站点） -->
+      <BizTabs />
+
       <!-- 类型入口 -->
       <div class="type-entry">
         <div
@@ -155,6 +158,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProjectCard from '@/components/ProjectCard.vue'
 import AppState from '@/components/AppState.vue'
+import BizTabs from '@/components/BizTabs.vue'
 import { categoryApi, projectApi, safe } from '@/api'
 import { compactNum, pickList, pickTotal, TYPE_COLOR } from '@/utils/format'
 

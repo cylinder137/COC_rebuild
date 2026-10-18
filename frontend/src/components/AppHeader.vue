@@ -25,6 +25,15 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-dropdown trigger="hover" @command="goBiz">
+          <span class="nav-item">其他业务 <el-icon class="xs"><ArrowDown /></el-icon></span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="https://tutor.collectionofcreations.uk">造物集家教平台</el-dropdown-item>
+              <el-dropdown-item command="https://websocket.collectionofcreations.uk">WebSocket 跨端同步</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </nav>
 
       <div class="hd-right">
@@ -120,6 +129,10 @@ function doSearch() {
 }
 function goCategory(cid) {
   router.push({ path: '/', query: cid ? { category_id: cid } : {} })
+}
+/** 其他业务：兄弟站点在别的子域名，直接新窗口打开，不占本站路由 */
+function goBiz(url) {
+  window.open(url, '_blank', 'noopener')
 }
 function onCommand(cmd) {
   if (cmd === 'logout') auth.logout()
