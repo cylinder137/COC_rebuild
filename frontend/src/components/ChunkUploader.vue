@@ -290,6 +290,28 @@ async function complete() {
   })
 }
 
+/** 直接用代码内容发起上传（供「粘贴 HTML 源码」入口使用）。
+ *  不新增后端接口：把源码包成 File，走完全相同的分片上传链路。 */
+async function startWithContent(text, name = 'index.html') {
+  if (!text || !text.trim()) return false
+  const blob = new Blob([text], { type: 'text/html;charset=utf-8' })
+  const f = new File([blob], name, { type: 'text/html' })
+  // 清掉上一次的残留，避免状态串台
+  sessionId.value = ''
+  uploadedSet.value = new Set()
+  failedSet.value = new Set()
+  totalParts.value = 0
+  storagePath.value = ''
+  projectFileId.value = null
+  instant.value = false
+  resumedTip.value = false
+  file.value = f
+  await startUpload()
+  return true
+}
+
+defineExpose({ startWithContent })
+
 function sleep(ms) { return new Promise((res) => setTimeout(res, ms)) }
 
 // 关闭页签提醒

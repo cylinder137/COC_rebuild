@@ -57,9 +57,9 @@ coc:
     # 打包服务（Node，另一个子会话实现）
     url: http://127.0.0.1:8091/pack
     timeout-ms: 4000
-  cors:
-    # 逗号分隔；前端开发端口 8085/8086
-    allowed-origins: "http://localhost:8085,http://127.0.0.1:8085,http://localhost:8086,http://127.0.0.1:8086"
+  # 2026-10-25：cors.allowed-origins 已废弃。跨域统一由网关（nginx）负责，
+  # 白名单在 E:\programs\nginx\conf\nginx.conf 的 $coc_cors_origin map 里。
+  # 留此注释是为了避免以后有人「补回」这个配置造成两层都发 ACAO 头。
   report:
     # 举报被采纳后给举报人的正反馈积分
     reward-points: 5

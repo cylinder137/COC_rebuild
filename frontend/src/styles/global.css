@@ -80,6 +80,14 @@ a:hover { color: var(--c-primary-hover); }
   *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
 }
 
+/* 底部 tab 栏占位：窄屏时内容不能被它盖住（含 iPhone 手势条 / Android 导航键安全区）
+   高度必须和 BottomTabBar 的 56px + safe-area 对齐，否则最后一行内容会被遮住 */
+@media (max-width: 767px) {
+  .shell-main { padding-bottom: calc(56px + var(--safe-bottom)); }
+}
+/* App 内底部 tab 始终显示，横屏也要留出安全距离 */
+.shell.is-native .shell-main { padding-bottom: calc(56px + var(--safe-bottom)); }
+
 /* 窄屏 */
 @media (max-width: 767px) {
   .container { padding: 0 16px; }

@@ -1,10 +1,22 @@
 <template>
   <router-link :to="`/projects/${p.project_id ?? p.id}`" class="pcard hoverable">
     <div class="thumb" :style="{ borderTopColor: typeColor }">
-      <img v-if="cover" :src="cover" :alt="p.title" loading="lazy" @error="imgErr = true" />
+      <!-- 进入视野后自动加载真实运行页面（沙箱 iframe），点击仍走项目主页 -->
+      <div v-if="live" class="live-frame">
+        <iframe
+          :src="liveUrl"
+          sandbox="allow-scripts"
+          referrerpolicy="no-referrer"
+          tabindex="-1"
+          aria-hidden="true"
+        />
+      </div>
+      <img v-else-if="cover" :src="cover" :alt="p.title" loading="lazy" @error="imgErr = true" />
       <div v-else class="thumb-ph" :style="{ background: phBg }">
         <span class="ph-txt">{{ (p.title || '?').slice(0, 1) }}</span>
       </div>
+
+      <span v-if="live" class="live-badge"><i />实时预览</span>
       <span class="type-bar" :style="{ background: typeColor }" />
       <div class="overlay">
         <div class="play"><el-icon :size="18"><VideoPlay /></el-icon></div>
@@ -34,8 +46,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { compactNum, fmtTime, statusOf, TYPE_COLOR, TYPE_LABEL, fileUrl } from '@/utils/format'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref } from 'vue'
+import { compactNum, fmtTime, statusOf, TYPE_COLOR, fileUrl, runUrlOf } from '@/utils/format'
+import { acquire, release } from '@/utils/liveSlots'
 
 const props = defineProps({
   p: { type: Object, required: true },
@@ -44,12 +57,62 @@ const props = defineProps({
 })
 
 const imgErr = ref(false)
+const live = ref(false)
+let io = null
+let cardEl = null
+
+/** 名额队列句柄（队列在模块级，全站共享 4 个并发 iframe 名额） */
+const handle = {
+  live: false,
+  queued: false,
+  onGrant: () => { live.value = true }
+}
+
+function wantsPreview() {
+  return acquire(handle)
+}
+function dropPreview() {
+  release(handle)
+  live.value = false
+}
+
 const type = computed(() => props.p.project_type || props.p.type || 'html')
 const typeColor = computed(() => TYPE_COLOR[type.value] || 'var(--c-primary)')
 const cover = computed(() => (imgErr.value ? '' : fileUrl(props.p.cover_path || props.p.cover || props.p.thumb)))
 const phBg = computed(() => `linear-gradient(135deg, ${typeColor.value}22, ${typeColor.value}08)`)
 const st = computed(() => statusOf(props.p.status))
 const reason = computed(() => props.p.down_reason || props.p.reject_reason || props.p.delete_reason)
+const pid = computed(() => props.p.project_id ?? props.p.id)
+const liveUrl = computed(() => runUrlOf(pid.value))
+
+/** 只有已发布 + 可运行类型才尝试实时预览 */
+const canLive = computed(() => {
+  if (!pid.value) return false
+  if (props.p.status !== undefined && props.p.status !== 2) return false
+  return ['html', 'scratch'].includes(type.value)
+})
+
+onMounted(() => {
+  if (!canLive.value) return
+  cardEl = getCurrentInstance()?.proxy?.$el || null
+  if (!cardEl) return
+  io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) wantsPreview()
+        else dropPreview()
+      }
+    },
+    { threshold: 0.5, rootMargin: '80px' }
+  )
+  io.observe(cardEl)
+})
+
+onBeforeUnmount(() => {
+  io?.disconnect()
+  io = null
+  dropPreview()
+})
 </script>
 
 <style scoped>
@@ -67,6 +130,20 @@ const reason = computed(() => props.p.down_reason || props.p.reject_reason || pr
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
 }
 .ph-txt { font-size: 34px; font-weight: 700; color: var(--c-text-3); opacity: .5; }
+
+/* 实时预览层：pointer-events:none 保证点击卡片仍跳转项目主页 */
+.live-frame { position: absolute; inset: 0; }
+.live-frame iframe {
+  width: 100%; height: 100%; border: 0; display: block;
+  pointer-events: none; background: #fff;
+}
+.live-badge {
+  position: absolute; left: 8px; top: 8px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; line-height: 1.6;
+}
+.live-badge i { width: 6px; height: 6px; border-radius: 50%; background: #34d399; }
 .overlay {
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;
   align-items: center; justify-content: center; color: #fff;

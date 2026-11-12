@@ -1,5 +1,5 @@
 <template>
-  <div class="console">
+  <div class="console" :class="{ 'is-native': isApp }">
     <AppHeader />
     <div class="console-body">
       <aside class="sidebar" :class="{ collapsed: ui.sidebarCollapsed }">
@@ -33,6 +33,7 @@
         </div>
       </section>
     </div>
+    <BottomTabBar />
   </div>
 </template>
 
@@ -40,8 +41,13 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import BottomTabBar from '@/components/BottomTabBar.vue'
 import { useUiStore } from '@/stores/ui'
 import { imApi, safe } from '@/api'
+import { IS_APP } from '@/utils/platform'
+
+/** App 内始终用底部 tab（含横屏） */
+const isApp = IS_APP
 
 const ui = useUiStore()
 const route = useRoute()
@@ -117,6 +123,7 @@ onMounted(async () => {
 .console-inner { padding: 24px; max-width: 1400px; }
 @media (max-width: 767px) {
   .sidebar { display: none; }
-  .console-inner { padding: 16px; }
+  /* 必须给底部 tab 让位：56px 栏高 + 安全区 + 16px 留白，与 BottomTabBar 对齐 */
+  .console-inner { padding: 16px 16px calc(56px + var(--safe-bottom) + 16px); }
 }
 </style>

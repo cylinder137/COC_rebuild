@@ -87,6 +87,7 @@ export const adminApi = {
   down: (pid, d) => http.post(`/admin/projects/${pid}/down`, d || {}),
   restore: (pid) => http.post(`/admin/projects/${pid}/restore`),
   removeProject: (pid, d) => http.delete(`/admin/projects/${pid}`, { params: { reason: d?.reason } }),
+  undeleteProject: (pid) => http.post(`/admin/projects/${pid}/undelete`),
   removeComment: (cid, d) => http.delete(`/admin/comments/${cid}`, { data: d || {} }),
   devApplications: (params) => http.get('/admin/developer-applications', { params }),
   approveDev: (id) => http.post(`/admin/developer-applications/${id}/approve`),

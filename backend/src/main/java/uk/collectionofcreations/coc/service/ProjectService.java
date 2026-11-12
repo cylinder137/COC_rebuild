@@ -420,6 +420,17 @@ public class ProjectService {
     @Transactional
     public Map<String, Object> submit(long projectId) {
         long uid = AuthContext.requireUserId();
+        // 2026-11-04：幂等 —— 上传完成已自动置为待审核(1)时，重复 submit 不再报错
+        Map<String, Object> preSubmit = projectMapper.findProjectById(projectId);
+        if (preSubmit != null && ((Number) preSubmit.get("is_deleted")).intValue() == 0
+                && ((Number) preSubmit.get("status")).intValue() == 1) {
+            Map<String, Object> dup = new LinkedHashMap<>();
+            dup.put("project_id", projectId);
+            dup.put("status", 1);
+            dup.put("audit_mode", "manual");
+            dup.put("message", "已在审核中，无需重复提交");
+            return dup;
+        }
         Map<String, Object> project = requireOwnEditable(projectId, uid);
         Map<String, Object> version = projectMapper.findLatestVersion(projectId);
         if (version == null) {

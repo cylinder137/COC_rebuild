@@ -323,6 +323,21 @@ public class UploadService {
             log.warn("回退待审状态失败 project_id={}: {}", projectId, e.getMessage());
         }
 
+        // 2026-11-04 需求：html 上传完成即自动进入人工审核（status 0/4 → 1），无需前端手动提交
+        try {
+            Object pst2 = project.get("status");
+            int curStatus = pst2 == null ? 0 : ((Number) pst2).intValue();
+            if ("html".equals(projectType) && (curStatus == 0 || curStatus == 4)) {
+                projectMapper.submitForReview(projectId);
+                HotCache.invalidate("projects:");
+                data.put("auto_status", 1);
+                data.put("auto_message", "已自动提交审核，管理员通过后出现在首页");
+                log.info("项目 {} 上传 v{}：html 自动提交审核（status {} -> 1）", projectId, versionNo, curStatus);
+            }
+        } catch (Exception e) {
+            log.warn("自动提交审核失败 project_id={}: {}", projectId, e.getMessage());
+        }
+
         // html 且是 zip：解压到 source 目录，便于沙箱直接运行
         if ("html".equals(projectType) && fileName.toLowerCase().endsWith(".zip")) {
             try {

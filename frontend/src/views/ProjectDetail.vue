@@ -33,13 +33,17 @@
                     <button class="vbtn" @click="reloadFrame"><el-icon><Refresh /></el-icon></button>
                   </el-tooltip>
                   <el-tooltip :content="isFull ? '退出全屏 (Esc)' : '全屏运行'" placement="bottom">
-                    <button class="vbtn" @click="toggleFull">
-                      <el-icon><component :is="isFull ? 'Close' : 'FullScreen'" /></el-icon>
+                    <button v-if="!isFull" class="vbtn" @click="toggleFull">
+                      <el-icon><FullScreen /></el-icon>
                     </button>
                   </el-tooltip>
                   <el-tooltip content="新窗口打开" placement="bottom">
                     <button class="vbtn" @click="openNew"><el-icon><TopRight /></el-icon></button>
                   </el-tooltip>
+                  <!-- 全屏退出：单独放大按钮，手机端顶栏容易被刘海/手势条挡住 -->
+                  <button v-if="isFull" class="vbtn vbtn-exit" @click="toggleFull">
+                    <el-icon><Close /></el-icon><span>退出全屏</span>
+                  </button>
                 </div>
 
                 <div class="viewer-body">
@@ -59,10 +63,6 @@
                     :title="`项目预览：${detail.title}`"
                   />
                 </div>
-                <div class="viewer-foot xs dim">
-                  沙箱隔离运行（sandbox="allow-scripts"，未授予 allow-same-origin，页面无法读取站点 cookie）
-                  <template v-if="runUrl"> · 运行地址：<span class="mono">{{ runUrl }}</span></template>
-                </div>
               </div>
 
               <!-- 标题 / 元信息 / 操作 -->
@@ -76,8 +76,7 @@
                   · 发布于 {{ fmtTime(detail.published_at || detail.created_at) }}
                   · {{ compactNum(detail.view_count_total) }} 次浏览
                 </div>
-                <p class="summary clamp3">{{ detail.description || detail.summary || '作者还没有填写简介。' }}</p>
-
+                <!-- 点赞/收藏/评论这类高频操作常驻，详情默认收起 -->
                 <div class="actions">
                   <button class="act" :class="{ on: liked }" @click="toggleLike" aria-pressed="liked">
                     <el-icon><component :is="liked ? 'StarFilled' : 'Star'" /></el-icon>
@@ -87,15 +86,30 @@
                     <el-icon><component :is="favorited ? 'CollectionTag' : 'Collection'" /></el-icon>
                     <span>收藏</span><span class="num">{{ favCount }}</span>
                   </button>
-                  <el-button :disabled="!canRun" @click="downloadSource">
-                    <el-icon><Download /></el-icon>&nbsp;下载源码
-                  </el-button>
-                  <el-button @click="openReport">
-                    <el-icon><Warning /></el-icon>&nbsp;举报
-                  </el-button>
-                  <el-button text @click="copyLink">
-                    <el-icon><Link /></el-icon>&nbsp;复制链接
-                  </el-button>
+                  <button class="act" @click="detailOpen = !detailOpen" :aria-expanded="detailOpen">
+                    <el-icon><component :is="detailOpen ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+                    <span>{{ detailOpen ? '收起详情' : '展开详情' }}</span>
+                  </button>
+                </div>
+
+                <!-- 简介 / 下载 / 链接 / 举报 / 运行说明：默认收起 -->
+                <div v-show="detailOpen" class="detail-extra">
+                  <p class="summary">{{ detail.description || detail.summary || '作者还没有填写简介。' }}</p>
+                  <div class="actions">
+                    <el-button :disabled="!canRun" @click="downloadSource">
+                      <el-icon><Download /></el-icon>&nbsp;下载源码
+                    </el-button>
+                    <el-button @click="openReport">
+                      <el-icon><Warning /></el-icon>&nbsp;举报
+                    </el-button>
+                    <el-button text @click="copyLink">
+                      <el-icon><Link /></el-icon>&nbsp;复制链接
+                    </el-button>
+                  </div>
+                  <div class="run-note xs dim">
+                    沙箱隔离运行（sandbox="allow-scripts"，未授予 allow-same-origin，页面无法读取站点 cookie）
+                    <template v-if="runUrl"> · 运行地址：<span class="mono">{{ runUrl }}</span></template>
+                  </div>
                 </div>
                 <div v-if="!auth.isLoggedIn" class="guest-hint sm">
                   <el-icon><InfoFilled /></el-icon>
@@ -276,7 +290,7 @@ import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe }
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
-  TYPE_LABEL, REASON_TYPES, auditModeOf, compactNum, fmtTime, fmtDateTime, statusOf, pickList, pickTotal
+  TYPE_LABEL, REASON_TYPES, auditModeOf, compactNum, fmtTime, fmtDateTime, statusOf, pickList, pickTotal, runUrlOf
 } from '@/utils/format'
 
 const route = useRoute()
@@ -291,6 +305,8 @@ const error = ref(null)
 const runUrl = ref('')
 const frameKey = ref(0)
 const isFull = ref(false)
+/** 详情栏（简介 / 下载 / 举报 / 运行说明）默认收起 */
+const detailOpen = ref(false)
 const liked = ref(false)
 const favorited = ref(false)
 const following = ref(false)
@@ -390,14 +406,16 @@ async function load() {
   projectApi.view(pid.value).catch(() => {})
 }
 
-/** 运行地址：优先用后端给的 run.url，后端没起来时退回约定路径 */
+/**
+ * 运行地址：必须用「绝对地址」。
+ * App 端页面源是 https://localhost（Capacitor 虚拟域名），
+ * 相对路径 /api/v1/run/x/ 会打到 App 自己的本地服务器，拿回应用自身的 index.html，
+ * 表现为「一直转圈 / 白屏」，这就是手机端无法加载任何 HTML 项目的根因。
+ */
 async function loadRunUrl() {
+  runUrl.value = runUrlOf(pid.value)
   const r = await safe(projectApi.run(pid.value))
-  if (r.ok && r.data?.url) runUrl.value = r.data.url
-  else {
-    const origin = (import.meta.env.VITE_API_BASE || '').replace(/\/api\/v1\/?$/, '')
-    runUrl.value = `${origin}/static/p/${pid.value}/index.html`
-  }
+  if (r.ok && r.data?.url_absolute) runUrl.value = r.data.url_absolute
 }
 
 async function loadComments(reset) {
@@ -647,7 +665,8 @@ onUnmounted(() => {
 .detail-grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
 
 .viewer {
-  position: relative; border: 1px solid var(--c-border); border-radius: var(--r-xl);
+  position: sticky; top: calc(var(--h-header) + 12px); z-index: 6;
+  border: 1px solid var(--c-border); border-radius: var(--r-xl);
   overflow: hidden; background: var(--c-bg-sunken); margin-bottom: 20px;
 }
 .viewer.fullscreen {
@@ -658,8 +677,8 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px;
   background: var(--c-bg-card); border-bottom: 1px solid var(--c-border);
 }
-.viewer.fullscreen .viewer-bar { height: 44px; }
-.viewer-body { position: relative; padding-top: 62.5%; }
+.viewer.fullscreen .viewer-bar { height: 48px; padding-top: env(safe-area-inset-top, 0px); }
+.viewer-body { position: relative; padding-top: min(62.5%, 58vh); }
 .viewer.fullscreen .viewer-body { padding-top: 0; flex: 1; }
 .frame {
   position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff;
@@ -670,14 +689,21 @@ onUnmounted(() => {
 }
 .fb-title { font-size: var(--fs-h3); font-weight: 600; }
 .fb-desc { max-width: 420px; }
-.viewer-foot { padding: 8px 12px; border-top: 1px solid var(--c-border); background: var(--c-bg-card); }
-.viewer.fullscreen .viewer-foot { display: none; }
 .vbtn {
   width: 28px; height: 28px; border-radius: var(--r-sm); border: 1px solid var(--c-border);
   background: var(--c-bg-sunken); color: var(--c-text-2); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .vbtn:hover { color: var(--c-primary); border-color: var(--c-primary-border); }
+/* 全屏退出：按钮加大、默认显示文字，避免手机上顶栏被刘海/手势区挡住点不到 */
+.vbtn-exit {
+  width: auto; min-width: 34px; height: 34px; padding: 0 12px; gap: 6px;
+  background: var(--c-primary); border-color: var(--c-primary); color: #fff; font-size: var(--fs-sm);
+}
+.vbtn-exit:hover { color: #fff; background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
+.detail-extra { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--c-border); }
+.run-note { margin-top: 12px; line-height: 1.7; }
+.viewer.fullscreen .vbtn-exit { height: 38px; }
 .type-pill {
   padding: 2px 10px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 600;
   border: 1px solid transparent; flex: 0 0 auto;
@@ -727,7 +753,7 @@ onUnmounted(() => {
   .side-col .card { min-width: 260px; }
 }
 @media (max-width: 767px) {
-  .viewer-body { padding-top: 75%; }
+  .viewer-body { padding-top: min(75%, 52vh); }
   .side-col { flex-direction: column; }
 }
 </style>

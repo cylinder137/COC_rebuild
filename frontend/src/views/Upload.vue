@@ -87,7 +87,55 @@
           <span>上传文件</span>
           <span class="xs dim" v-if="form.project_id">草稿 ID：#{{ form.project_id }}</span>
         </div>
-        <ChunkUploader :project-id="form.project_id" @completed="onUploaded" @reset="uploaded = null" />
+
+        <!-- HTML 类型才提供「粘贴源码」：网页端与手机端共用同一入口（二期反馈第 2 条） -->
+        <div v-if="canPaste" class="src-mode">
+          <button class="sm-btn" :class="{ on: srcMode === 'file' }" @click="srcMode = 'file'">
+            <el-icon><UploadFilled /></el-icon> 上传文件
+          </button>
+          <button class="sm-btn" :class="{ on: srcMode === 'paste' }" @click="srcMode = 'paste'">
+            <el-icon><EditPen /></el-icon> 粘贴源码
+          </button>
+        </div>
+
+        <template v-if="canPaste && srcMode === 'paste'">
+          <div class="paste-box">
+            <div class="row between center" style="margin-bottom:8px">
+              <span class="xs dim">把完整 HTML 粘进来（含 &lt;!DOCTYPE html&gt;），保存时自动转成单文件上传</span>
+              <span class="xs dim num">{{ pasteSize }}</span>
+            </div>
+            <el-input
+              v-model="pastedHtml"
+              type="textarea"
+              :rows="14"
+              resize="vertical"
+              class="paste-area"
+              placeholder="<!DOCTYPE html>\n<html>\n  <head>…</head>\n  <body>…</body>\n</html>"
+            />
+            <div class="row between center wrap gap12" style="margin-top:12px">
+              <span class="xs dim">
+                <template v-if="pasteWarn">{{ pasteWarn }}</template>
+                <template v-else>会以 index.html 为文件名进入同一个分片上传流程</template>
+              </span>
+              <el-button
+                type="primary"
+                :loading="pasteUploading"
+                :disabled="!pastedHtml.trim()"
+                @click="uploadPasted"
+              >
+                用这段源码上传
+              </el-button>
+            </div>
+          </div>
+        </template>
+
+        <ChunkUploader
+          v-show="!canPaste || srcMode === 'file' || pasteUploading || uploaded"
+          ref="chunkRef"
+          :project-id="form.project_id"
+          @completed="onUploaded"
+          @reset="uploaded = null"
+        />
       </div>
 
       <div class="card mb16">
@@ -118,9 +166,17 @@
           show-icon
           :title="isAuto ? '该类型免审：提交后立即发布，首页可见' : '该类型需审核：提交后进入待审队列，管理员通过后公开'"
         />
-        <div class="row between" style="margin-top:16px">
+                <el-alert
+          v-if="autoSubmitted"
+          type="success"
+          :closable="false"
+          show-icon
+          style="margin-top:12px"
+          :title="autoMsg"
+        />
+<div class="row between" style="margin-top:16px">
           <el-button @click="step = 1">上一步</el-button>
-          <el-button type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
+          <el-button v-if="!autoSubmitted" type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
             提交作品
           </el-button>
         </div>
@@ -130,7 +186,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChunkUploader from '@/components/ChunkUploader.vue'
@@ -142,8 +198,12 @@ const router = useRouter()
 const step = ref(0)
 const creating = ref(false)
 const submitting = ref(false)
+const autoSubmitted = ref(false)
+const autoMsg = ref('')
 const uploaded = ref(null)
 const categories = ref([])
+
+/* ---- 粘贴 HTML 源码（二期反馈第 2 条）：依赖 form，放到 form 定义之后 ---- */
 
 const form = reactive({
   project_id: null,
@@ -156,6 +216,36 @@ const form = reactive({
   tags: []
 })
 
+/* ---- 粘贴 HTML 源码（二期反馈第 2 条） ---- */
+const chunkRef = ref(null)
+const srcMode = ref('file')       // file | paste
+const pastedHtml = ref('')
+const pasteUploading = ref(false)
+/** 只有 html 类型才有「粘贴源码」；zip 包里有多个文件，粘贴表达不了 */
+const canPaste = computed(() => form.project_type === 'html')
+const pasteSize = computed(() => {
+  const n = new Blob([pastedHtml.value || '']).size
+  return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`
+})
+/** 常见坑提示：粘贴的是片段而不是完整文档 */
+const pasteWarn = computed(() => {
+  const t = pastedHtml.value.trim()
+  if (!t) return ''
+  if (!/<html[\s>]/i.test(t) && !/<body[\s>]/i.test(t)) return '检测不到 <html>/<body>，粘贴的可能是片段，仍可上传'
+  return ''
+})
+
+async function uploadPasted() {
+  if (!pastedHtml.value.trim()) { ElMessage.warning('请先粘贴 HTML 源码'); return }
+  if (!form.project_id) { ElMessage.warning('草稿尚未创建，请返回上一步'); return }
+  pasteUploading.value = true
+  try {
+    await chunkRef.value?.startWithContent(pastedHtml.value, 'index.html')
+  } finally {
+    pasteUploading.value = false
+  }
+}
+
 const types = [
   { value: 'html', label: 'HTML 网页', desc: 'zip 或 html 包，可含 JS', color: 'var(--c-type-html)', icon: 'Monitor', auto: false },
   { value: 'scratch', label: 'Scratch 作品', desc: '.sb2 / .sb3 积木项目', color: 'var(--c-type-scratch)', icon: 'Cpu', auto: true },
@@ -164,7 +254,9 @@ const types = [
 
 const isAuto = computed(() => isAutoApproved(form.project_type))
 const canNext = computed(() => !!form.title.trim() && !!form.summary.trim())
-const canSubmit = computed(() => !!uploaded.value?.project_file_id)
+// 只要有草稿(project_id)就允许点提交：即使刷新丢了上传状态也能提交，
+// 缺源码时后端会返回明确错误（"请先上传项目源码后再提交"）
+const canSubmit = computed(() => !!(uploaded.value?.project_file_id || form.project_id))
 
 async function saveDraft() {
   if (!canNext.value) { ElMessage.warning('请填写标题与简介'); return }
@@ -185,7 +277,44 @@ async function saveDraft() {
   step.value = 2
 }
 
-function onUploaded(res) { uploaded.value = res }
+function onUploaded(res) {
+  uploaded.value = res
+  // 上传成功后收起粘贴面板，让用户看到结果卡片
+  if (res && srcMode.value === 'paste') srcMode.value = 'file'
+  autoSubmitAfterUpload()
+}
+
+/* 手机端关键修复：步进切换后页面不自动回顶，用户看到的还是上一屏，
+   误以为「填不了信息」。每次步进都回顶，并等 DOM 渲染完再滚。 */
+watch(step, async () => {
+  await nextTick()
+  window.scrollTo({ top: 0, behavior: 'auto' })
+})
+
+/** 上传完成即自动提交：html → status=1 待审核；scratch/structure → status=2 直接发布
+ *  服务端 submit 会校验「有版本 + 有 source 文件」；已在审核/已是发布态时静默视为成功 */
+async function autoSubmitAfterUpload() {
+  if (!form.project_id || autoSubmitted.value) return
+  const r = await safe(uploadApi.submit(form.project_id))
+  if (r.ok) {
+    const st = r.data?.status
+    autoSubmitted.value = true
+    if (st === 2) {
+      autoMsg.value = '上传完成，已自动发布，刷新首页即可看到'
+    } else {
+      autoMsg.value = '上传完成，已自动提交审核，管理员通过后出现在首页'
+    }
+    ElMessage.success(autoMsg.value)
+    return
+  }
+  const msg = r.error?.response?.data?.message || ''
+  if (/审核中|已提交|只有草稿|重复/.test(msg)) {
+    autoSubmitted.value = true
+    autoMsg.value = msg
+    return
+  }
+  ElMessage.warning('自动提交未成功：' + (msg || '请点下方按钮重试'))
+}
 
 function onCover(d) { form.cover_path = d?.cover_path || '' }
 
@@ -228,4 +357,26 @@ onMounted(async () => {
 .kv { display: flex; gap: 12px; font-size: var(--fs-sm); padding: 4px 0; }
 .kv .dim { min-width: 110px; }
 @media (max-width: 767px) { .type-grid { grid-template-columns: 1fr; } }
+
+/* ---- 上传方式切换（上传文件 / 粘贴源码） ---- */
+.src-mode { display: flex; gap: 8px; margin-bottom: 12px; }
+.sm-btn {
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 38px; padding: 0 12px; border-radius: var(--r-md); cursor: pointer;
+  border: 1px solid var(--c-border); background: var(--c-bg-sunken); color: var(--c-text-2);
+  font-size: var(--fs-sm);
+}
+.sm-btn.on {
+  border-color: var(--c-primary); background: var(--c-primary-weak);
+  color: var(--c-primary); font-weight: 600;
+}
+.paste-box { border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: 12px; background: var(--c-bg-sunken); }
+/* 手机上等宽字体更容易对齐缩进；字号不小于 13px 否则 iOS/Android 会自动放大 */
+.paste-area :deep(textarea) {
+  font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace;
+  font-size: 13px; line-height: 1.55;
+}
+@media (max-width: 767px) {
+  .sm-btn { height: 42px; }
+}
 </style>

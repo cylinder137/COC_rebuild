@@ -13,18 +13,12 @@
           />
           <el-button type="primary" round @click="applySearch">搜索</el-button>
         </div>
-        <div class="quick">
-          <span class="xs dim">快捷：</span>
-          <span v-for="q in ['贪吃蛇', '像素画', '红石电路', '迷宫']" :key="q" class="quick-item" @click="quickSearch(q)">
-            {{ q }}
-          </span>
-        </div>
-      </div>
+</div>
     </section>
 
     <div class="container">
-      <!-- 造物集其他业务（家教平台 / WebSocket 同步 等兄弟站点） -->
-      <BizTabs />
+      <!-- 造物集其他业务（家教平台 / WebSocket 同步 等兄弟站点）—— App 端不展示 -->
+      <BizTabs v-if="!isApp" />
 
       <!-- 类型入口 -->
       <div class="type-entry">
@@ -154,16 +148,18 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProjectCard from '@/components/ProjectCard.vue'
 import AppState from '@/components/AppState.vue'
 import BizTabs from '@/components/BizTabs.vue'
 import { categoryApi, projectApi, safe } from '@/api'
 import { compactNum, pickList, pickTotal, TYPE_COLOR } from '@/utils/format'
+import { IS_APP } from '@/utils/platform'
 
 const route = useRoute()
 const router = useRouter()
+const isApp = IS_APP
 
 const PAGE_SIZE = 20
 const list = ref([])
@@ -261,6 +257,24 @@ async function fetchSide() {
   }
 }
 
+/* 底部 tab / 前进后退 只改 query 不重挂组件（同路由复用），
+   必须监听 query 同步筛选条件并重拉列表，否则点了 tab「没反应」（2026-11-04 修复） */
+watch(() => route.query, (q) => {
+  const nextType = q.project_type || ''
+  const nextCat = q.category_id || ''
+  const nextSort = q.sort || 'latest'
+  const nextKw = q.keyword || ''
+  if (nextType === filters.project_type && nextCat === filters.category_id
+      && nextSort === filters.sort && nextKw === activeKeyword.value) return
+  filters.project_type = nextType
+  filters.category_id = nextCat
+  filters.sort = nextSort
+  keyword.value = nextKw
+  activeKeyword.value = nextKw
+  page.value = 1
+  fetchPage(true)   // 不调 syncQuery：避免 router.replace → watch 互踢
+}, { deep: true })
+
 onMounted(() => {
   fetchPage(true)
   fetchSide()
@@ -331,5 +345,8 @@ onMounted(() => {
   .type-entry { grid-template-columns: repeat(2, 1fr); }
   .hero { padding: 24px 0 20px; }
   .hero-title { font-size: 22px; }
+  /* 手机/App：双列并排，同一屏能预览更多作品（B 站手机端那种密度） */
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .filter-bar { margin-bottom: 12px; }
 }
 </style>

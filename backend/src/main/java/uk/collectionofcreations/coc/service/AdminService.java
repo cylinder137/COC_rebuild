@@ -136,31 +136,26 @@ public class AdminService {
         }
         long projectId = ((Number) version.get("project_id")).longValue();
         Map<String, Object> project = projectMapper.findProjectById(projectId);
-        if (project == null) {
-            throw BizException.notFound("作品不存在");
-        }
-        if (project.get("is_deleted") != null && ((Number) project.get("is_deleted")).intValue() == 1) {
-            throw BizException.badRequest("该作品已被驳回删除，无需重复操作");
+        if (project == null || ((Number) project.get("is_deleted")).intValue() == 1) {
+            throw BizException.notFound("作品不存在或已删除");
         }
         String r = (reason == null || reason.trim().isEmpty()) ? "不符合投稿规范" : reason.trim();
+        // 2026-11-04：改为软驳回 —— 只置 status=4 并记录理由，保留源码文件；
+        // 作者修改/重传后可再次提交（重新进入 status=1 待审核）。
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("project_id", projectId);
         p.put("reason", r);
-        projectMapper.softDeleteProject(p);
-        Path dir = storageService.projectRootDir(projectId);
-        boolean existed = Files.exists(dir);
-        storageService.deleteRecursively(dir);
+        projectMapper.rejectProject(p);
         notify(((Number) project.get("author_id")).longValue(), "review_result", "你的作品未通过审核",
-                "《" + project.get("title") + "》未通过审核，已删除。原因：" + r, "/me/projects");
-        audit(adminId, "reject_project_deleted", "project", projectId,
-                "驳回即删除：《" + project.get("title") + "》原因：" + r
-                        + "，代码目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
+                "《" + project.get("title") + "》未通过审核，原因：" + r
+                        + "。可在「我的作品」修改或重新上传后再次提交。", "/me/projects");
+        audit(adminId, "reject_project", "project", projectId,
+                "驳回（保留文件，可重发）：《" + project.get("title") + "》原因：" + r, ip);
         HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("status", 4);
-        data.put("deleted", true);
-        data.put("storage_removed", existed);
+        data.put("deleted", false);
         data.put("reject_reason", r);
         return data;
     }
@@ -198,25 +193,67 @@ public class AdminService {
         return data;
     }
 
-    /** 删除：软删 DB + 物理删除服务器上该项目目录 + 审计 */
+    /** 删除：草稿=软删（保留文件，可「撤销删除」）；其他=软删 DB + 物理删目录（不可撤销） */
     @Transactional
     public Map<String, Object> delete(long projectId, String reason, String ip) {
         long adminId = AuthContext.requireAdmin();
         Map<String, Object> project = requireProject(projectId);
+        int status = ((Number) project.get("status")).intValue();
+        boolean draft = status == 0;
+        String r = (reason == null || reason.trim().isEmpty()) ? "违规删除" : reason.trim();
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("project_id", projectId);
-        p.put("reason", reason == null ? "违规删除" : reason);
+        p.put("reason", r);
         projectMapper.softDeleteProject(p);
         Path dir = storageService.projectRootDir(projectId);
         boolean existed = Files.exists(dir);
-        storageService.deleteRecursively(dir);
+        boolean storageRemoved = false;
+        // 2026-11-04：草稿删除保留源文件，支持「撤销删除」；非草稿仍物理清理
+        if (!draft) {
+            storageService.deleteRecursively(dir);
+            storageRemoved = existed;
+        }
         audit(adminId, "delete_project", "project", projectId,
-                "删除项目《" + project.get("title") + "》，物理目录" + (existed ? "已删除" : "不存在") + "：" + dir, ip);
+                (draft ? "删除草稿（可撤销，文件保留）：《" : "删除项目（物理清目录）：《")
+                        + project.get("title") + "》原因：" + r + "，目录 " + dir
+                        + (draft ? "" : (existed ? "（已删除）" : "（不存在）")), ip);
         HotCache.invalidate("projects:");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("project_id", projectId);
         data.put("deleted", true);
-        data.put("storage_removed", existed);
+        data.put("undoable", draft);
+        data.put("storage_removed", storageRemoved);
+        data.put("storage_exists", Files.exists(dir));
+        return data;
+    }
+
+    /** 撤销删除：仅草稿（status=0 且 is_deleted=1）可恢复，文件若仍在则完整恢复（2026-11-04） */
+    @Transactional
+    public Map<String, Object> undelete(long projectId, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null) {
+            throw BizException.notFound("项目不存在");
+        }
+        if (((Number) project.get("is_deleted")).intValue() == 0) {
+            throw BizException.badRequest("该项目未被删除，无需撤销");
+        }
+        int status = ((Number) project.get("status")).intValue();
+        if (status != 0) {
+            throw BizException.badRequest("只有草稿状态的作品可以撤销删除（当前状态：" + status + "）");
+        }
+        projectMapper.undeleteProject(projectId);
+        Path dir = storageService.projectRootDir(projectId);
+        boolean filesAlive = Files.exists(dir);
+        audit(adminId, "undelete_project", "project", projectId,
+                "撤销删除草稿：《" + project.get("title") + "》，源目录" + (filesAlive ? "仍在" : "已被历史清理"), ip);
+        HotCache.invalidate("projects:");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("status", status);
+        data.put("is_deleted", 0);
+        data.put("files_alive", filesAlive);
+        data.put("message", filesAlive ? "已撤销删除，草稿恢复" : "已撤销删除，但源文件已被清理，需重新上传");
         return data;
     }
 

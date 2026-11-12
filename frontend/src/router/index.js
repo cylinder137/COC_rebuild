@@ -82,6 +82,31 @@ router.beforeEach((to) => {
   return true
 })
 
+/* 安卓返回键（二期反馈第 6 条）。
+   MainActivity 会 evaluateJavascript 调 window.__cocOnBack()：
+     返回 'handled' -> 原生什么都不做（页面已经回上一级）
+     返回 'exit'    -> 原生走默认行为（退出 App）
+   规则：能退就退一级；已在根页面（首页/登录）才允许退出。 */
+if (typeof window !== 'undefined') {
+  window.__cocOnBack = function () {
+    const cur = router.currentRoute.value
+    const atRoot = cur.path === '/' || cur.path === '/login' || cur.path === '/404'
+
+    // 有未关闭的遮罩弹窗时，先关掉它们再退
+    const overlay = document.querySelector('.el-overlay')
+    if (overlay) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+      return 'handled'
+    }
+    if (atRoot) return 'exit'
+
+    // history 里有上一页就回退（保留滚动位置），否则回首页
+    if (window.history.state?.back) router.back()
+    else router.replace('/')
+    return 'handled'
+  }
+}
+
 /* 打包产物更新后，旧页面懒加载的 chunk 会 404（点击 tab 无反应 / 白屏）。
    这里统一兜住：遇到「动态导入失败」就整页刷新一次，拿到新版本。 */
 let reloading = false

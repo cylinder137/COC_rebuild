@@ -40,6 +40,17 @@
           </router-link>
           <el-button v-if="p.status === 2" size="small" text @click="goDashboard(p)">看数据</el-button>
           <el-button size="small" text @click="openCover(p)">封面</el-button>
+          <!-- 草稿补提交：刷新或离开上传页后也能发布，避免卡在 status=0 -->
+          <el-button
+            v-if="p.status === 0"
+            size="small"
+            text
+            type="primary"
+            :loading="submittingId === (p.project_id || p.id)"
+            @click="submitDraft(p)"
+          >
+            提交审核
+          </el-button>
           <el-button v-if="isRejectedOrDown(p)" size="small" text type="primary" @click="resubmit(p)">
             重新编辑投稿
           </el-button>
@@ -84,6 +95,7 @@ const error = ref(null)
 const status = ref('')
 const coverVisible = ref(false)
 const coverTarget = ref(null)
+const submittingId = ref(null)
 
 /** 打开某作品的封面设置弹窗 */
 function openCover(p) {
@@ -116,6 +128,22 @@ function goDashboard(p) { router.push({ path: '/me/dashboard', query: { projectI
 function resubmit(p) {
   ElMessage.info('编辑功能：MVP 阶段请新建投稿（后端 PUT /projects/{id} 已就绪，前端编辑页二期补）')
   router.push('/upload')
+}
+
+/** 草稿(0) 直接补提交：html 走人工审核(→1)，scratch/structure 直接发布(→2) */
+async function submitDraft(p) {
+  const id = p.project_id || p.id
+  submittingId.value = id
+  const r = await safe(uploadApi.submit(id))
+  submittingId.value = null
+  if (!r.ok) {
+    ElMessage.error(r.error?.response?.data?.message || '提交失败，请稍后再试')
+    return
+  }
+  const st = r.data?.status
+  if (st === 2) ElMessage.success('已发布，刷新首页即可看到')
+  else ElMessage.success('已提交审核，管理员通过后出现在首页')
+  load()
 }
 
 onMounted(load)

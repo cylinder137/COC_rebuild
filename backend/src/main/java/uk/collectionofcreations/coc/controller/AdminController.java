@@ -77,6 +77,13 @@ public class AdminController {
         return ApiResponse.ok(adminService.restore(projectId, FileController.clientIp(request)));
     }
 
+    /** 撤销删除（仅草稿；2026-11-04） */
+    @PostMapping("/projects/{project_id}/undelete")
+    public ApiResponse<Map<String, Object>> undelete(@PathVariable("project_id") long projectId,
+                                                     HttpServletRequest request) {
+        return ApiResponse.ok(adminService.undelete(projectId, FileController.clientIp(request)));
+    }
+
     /** 删除（软删 DB + 物理删代码 + 审计） */
     @DeleteMapping("/projects/{project_id}")
     public ApiResponse<Map<String, Object>> delete(@PathVariable("project_id") long projectId,

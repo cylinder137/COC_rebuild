@@ -94,6 +94,10 @@ public interface ProjectMapper {
     @Update("UPDATE project SET is_deleted = 1, delete_reason = #{reason}, updated_at = NOW() WHERE project_id = #{project_id}")
     int softDeleteProject(Map<String, Object> param);
 
+    @Update("UPDATE project SET is_deleted = 0, delete_reason = NULL, updated_at = NOW() "
+            + "WHERE project_id = #{project_id} AND is_deleted = 1")
+    int undeleteProject(@Param("project_id") long projectId);
+
     @Update("UPDATE project SET view_count_total = view_count_total + 1 WHERE project_id = #{project_id}")
     int incViewCount(@Param("project_id") long projectId);
 

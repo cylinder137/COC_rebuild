@@ -3,7 +3,7 @@
     <div class="row between center wrap gap12" style="margin-bottom:20px">
       <div>
         <h2 class="section-title" style="margin:0">项目管理</h2>
-        <div class="sm dim">下架 / 恢复 / 删除（物理删含服务器留存代码） / 查看存储路径</div>
+        <div class="sm dim">下架 / 恢复 / 删除 / 草稿撤销删除（草稿删除保留文件） / 查看存储路径</div>
       </div>
       <div class="row center gap8 wrap">
         <el-select v-model="status" placeholder="全部状态" clearable style="width:140px" @change="load">
@@ -52,9 +52,11 @@
           <template #default="{ row }">
             <el-button size="small" text @click="$router.push(`/admin/projects/${row.project_id}/storage`)">存储路径</el-button>
             <el-button size="small" text @click="$router.push(`/projects/${row.project_id}`)">前台</el-button>
-            <el-button v-if="row.status === 3" size="small" type="success" text @click="restore(row)">恢复</el-button>
-            <el-button v-else size="small" type="warning" text @click="down(row)">下架</el-button>
-            <el-button size="small" type="danger" text @click="remove(row)">删除</el-button>
+            <el-button v-if="!row.is_deleted && row.status === 3" size="small" type="success" text @click="restore(row)">恢复</el-button>
+            <el-button v-else-if="!row.is_deleted" size="small" type="warning" text @click="down(row)">下架</el-button>
+            <!-- 草稿删除可撤销：显示撤销删除（2026-11-04） -->
+            <el-button v-if="row.is_deleted && row.status === 0" size="small" type="primary" text @click="undelete(row)">撤销删除</el-button>
+            <el-button v-if="!row.is_deleted" size="small" type="danger" text @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -113,10 +115,19 @@ async function restore(row) {
   if (!r.ok) { ElMessage.error('操作失败'); return }
   ElMessage.success('已恢复'); load()
 }
+
+async function undelete(row) {
+  const r = await safe(adminApi.undeleteProject(row.project_id))
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '撤销删除失败'); return }
+  ElMessage.success(r.data?.files_alive === false ? '已撤销删除，但源文件已清理，需重新上传' : '已撤销删除，草稿已恢复')
+  load()
+}
 async function remove(row) {
   try {
     const { value } = await ElMessageBox.prompt(
-      `删除会物理删除服务器留存代码且不可恢复！请输入作品标题「${row.title}」确认`,
+      row.status === 0
+        ? `删除草稿《${row.title}》：源文件会保留，可在「含已删除」里撤销删除。请输入标题确认`
+        : `删除会物理删除服务器留存代码且不可恢复！请输入作品标题「${row.title}」确认`,
       '危险操作',
       { inputValidator: (v) => v === row.title || '标题不匹配', confirmButtonClass: 'el-button--danger' }
     )

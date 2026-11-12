@@ -11,6 +11,18 @@ import './styles/global.css'
 
 import App from './App.vue'
 import router from './router'
+import { IS_APP, APP_BUILD } from './utils/platform'
+
+/* App 内打个标记：原生层已经做了安全区让位，CSS 侧不再重复补 */
+if (IS_APP && typeof document !== 'undefined') {
+  document.documentElement.classList.add('is-native')
+}
+
+/* 构建版本号挂到 window：App 顶栏按需求不再显示标题，
+   需要确认装的是哪个包时在 WebView 控制台看 window.__COC_BUILD */
+if (typeof window !== 'undefined') {
+  window.__COC_BUILD = APP_BUILD
+}
 
 const app = createApp(App)
 app.use(createPinia())

@@ -81,6 +81,18 @@ export function fileUrl(p) {
   return API_ORIGIN + (p.startsWith('/') ? p : '/' + p)
 }
 
+/**
+ * 沙箱运行地址。
+ * 必须是「绝对地址」：App 端页面源是 https://localhost（Capacitor 虚拟域名），
+ * 相对路径会打到 App 自己的本地服务器，拿回应用自身的 index.html，表现为白屏。
+ */
+export function runUrlOf(projectId) {
+  if (!projectId) return ''
+  return `${API_ORIGIN}/api/v1/run/${projectId}/`
+}
+
+export { API_ORIGIN }
+
 /** 从任意后端字段里抠出列表（兼容 list / records / items / data 包装） */
 export function pickList(res) {
   if (!res) return []
