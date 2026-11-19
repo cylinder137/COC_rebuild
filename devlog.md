@@ -4,6 +4,190 @@
 
 ---
 
+## 2026-11-19 · 修复：官网所有资源地址被写死成 `127.0.0.1:8090`（下载 2.0.5 报 404 的根因）
+
+> 线上事故修复，随 2.0.5 网页产物一起发布（APK 不受影响，无需重打包）。
+
+### 现象
+
+官网 `/downloads` 页面显示 v2.0.5、点「下载最新版」却返回：
+
+```json
+{"code":404,"message":"接口或资源不存在","data":null}
+```
+
+### 根因
+
+`frontend/src/utils/format.js` 的 `API_ORIGIN`：
+
+```js
+const base = import.meta.env.VITE_API_BASE || ''
+try { return base ? new URL(base, 'http://127.0.0.1:8090').origin : '' } catch (e) { return '' }
+```
+
+生产构建里 `VITE_API_BASE=/api/v1`（**相对**基址），而 `new URL('/api/v1', 'http://127.0.0.1:8090')` 返回的 `origin` 就是那个「解析基准」本身 → **`http://127.0.0.1:8090`**。
+
+于是 `fileUrl('/downloads/coc-app-2.0.5.apk')` 拼成 `http://127.0.0.1:8090/downloads/coc-app-2.0.5.apk`：
+- 访问者若就在本机（服务器机器上开浏览器）→ 打到**后端 8090**，`/downloads/*` 不是后端路由 → 就是那句 JSON 404；
+- 访问者若在别的设备 → `127.0.0.1` 指向他自己 → 连接被拒。
+
+同一个 `API_ORIGIN` 还喂给 `runUrlOf()`，所以官网的**封面、头像、沙箱运行页**其实全都指着 `127.0.0.1:8090`（本机还能歪打正着跑起来，远程设备上封面/头像全裂、作品打不开）。之前一直没暴露，是因为 App 端走的是另一条分支（`ORIGIN` 在原生壳里等于线上域名），而网页端只是没人认真点过下载。
+
+另外 `version.json` 的 `fetch` 也走 `fileUrl`，同样 404 → 页面显示 v2.0.5 其实是**静态兜底数组**兜住的（`RELEASES[0]`），不是真的读到了服务器版本号。
+
+### 修法
+
+`frontend/src/utils/format.js` L73-L88：
+
+```js
+if (ORIGIN) return ORIGIN                       // 原生壳：线上绝对源，保持不变
+const base = import.meta.env.VITE_API_BASE || ''
+if (!/^https?:\/\//i.test(base)) return ''      // 相对基址（/api/v1）→ 同源，返回空串
+try { return new URL(base).origin } catch (e) { return '' }
+```
+
+- 相对基址（生产 `/api/v1`）→ 返回 `''`，`fileUrl` 生成相对路径 `/downloads/x.apk`、`/avatars/x.png` → 由 nginx 直出 ✔
+- 绝对基址（开发 `http://127.0.0.1:8084/api/v1`）→ 仍返回其 origin ✔
+- 原生壳 → `ORIGIN`（线上域名）分支在前，行为不变 ✔
+
+顺手修了第二个同源问题：`frontend/vite.config.js` 加
+
+```js
+base: mode === 'user' ? '/user/' : '/',
+```
+
+`dist-user` 是挂在 `/user/` 下的（nginx `location ^~ /user/` → `dist-user/`），但产物里资源写的是 `/assets/index-*.js`，会被主站 `dist/assets` 抢走 → 入口 chunk 404，`/user/` 一直是坏的。现在产物是 `/user/assets/...`，实测 4 个资源全 200。
+
+### 影响面
+
+| 位置 | 修前 | 修后 |
+| --- | --- | --- |
+| 官网下载链接 | `http://127.0.0.1:8090/downloads/*.apk` → 404 JSON | `/downloads/*.apk` → 200，3,864,431 B |
+| 官网 `version.json` | 404，靠静态数组兜底 | 真正读到服务器版本号 |
+| 封面 / 头像 | `http://127.0.0.1:8090/covers|avatars/*`（远程全裂） | 相对路径，nginx 直出 |
+| 沙箱运行页 | `http://127.0.0.1:8090/api/v1/run/*`（远程打不开） | `/api/v1/run/*`，且**会经过 nginx 的 `sub_filter`**（虚拟按键桥只有 8084 这条链才注入） |
+| App（Capacitor） | 正常 | 正常（`ORIGIN` 分支未动） |
+
+### 验证
+
+- 产物自检：`grep -rl "127.0.0.1:8090" dist/assets/*.js` 只剩 `AppState` 里的一句**报错文案**（"无法连接后端服务（127.0.0.1:8090 可能尚未启动）"），`format-*.js` 已为 0；chunk 引用完整性 dangling = 0（dist / dist-user 各 64 个文件）。
+- HTTP：`/` → `index-BG7EI2uG.js`；`/downloads/coc-app-2.0.5.apk` → 200 / 3,864,431 B / `application/vnd.android.package-archive`；`/user/` 与 `/user/assets/*` 全 200；公网 index 已切新 hash。
+
+### 教训
+
+**构建产物里绝不能出现回环地址当资源前缀。** 以后每次 `vite build` 完都要跑一遍：
+
+```bash
+grep -rl "127.0.0.1:8090" frontend/dist/assets/*.js
+grep -rl "127.0.0.1:8090" frontend/dist-user/assets/*.js
+```
+
+除 `AppState` 的文案外不该有命中。另外「页面显示对了」不代表数据源对了——这次 v2.0.5 能显示，是静态兜底骗过了眼睛，要额外确认 `version.json` 请求本身是不是 200。
+
+---
+
+## 2026-11-19 · 手机端全屏虚拟按键（双摇杆 + 自定义按键 + 设置模式）（v2.0.5）
+
+> 本条属于 **COC 五期测试** 的改动，已随 **2.0.5 / versionCode 15** 打包发布。
+
+### 改动目的
+
+2.0.4 让手机端能全屏横屏跑 HTML 作品了，但**触摸屏没有键盘**——凡是靠 `keydown` 操作的作品（`WASD` 走位、空格跳、数字键放技能）在手机上一律玩不了。本次为手机端全屏界面补上一套**虚拟按键层**：
+
+1. 两个摇杆，分别映射 **WASD** 与 **方向键**；两者**独立映射、互不干扰**（真正的双指同时操作，不是「一次只能动一个」）。
+2. 可**自定义新增虚拟按键**，字段规则：空格 → `space`、回车 → `enter`、`ctrl` / `shift` 保持原名，其余数字键与字母键按字符本身写（`1`、`9`、`z`、`x`…）。
+3. 独立的**虚拟按键设置模式**：摇杆只需切换显示/隐藏，按键才需要新建；设置模式下可**拖动**摇杆与按键调整位置，且**拖动/点击一律不触发按键**（否则摆布局的时候人物已经在乱跑了）。
+4. 选中某个按键或摇杆后，用**滑条**调它的**透明度**与**尺寸**。
+5. 退出设置模式**自动落盘**到本地存储，下次开启虚拟按键自动还原上次的方案。
+
+### 技术难点与方案
+
+作品跑在 `sandbox="allow-scripts"` 的 iframe 里（**故意不给 `allow-same-origin`**，这是安全边界，不能为了虚拟按键放开）。父页面因此**拿不到 `contentDocument`，也无法向内部 `dispatchEvent`**。最终走三层接力：
+
+```
+触摸 → VirtualPad（父页面）
+      → window.postMessage({__coc:'key',type:'down',key,code,keyCode}) → 作品 iframe
+      → coc-key-bridge.js 合成 KeyboardEvent → dispatch 到 document.activeElement
+```
+
+| 环节 | 做法与坑 |
+| --- | --- |
+| 把脚本送进 iframe | `sandbox` 不能放宽，只能由**服务端注入**。nginx 在 `location ~ ^/api/v1/run/` 用 `sub_filter` 把 `<script src="/coc-key-bridge.js">` 插到 `</body>` 前 |
+| 注入为什么不生效 | `sub_filter` **无法处理压缩响应体**。必须 `proxy_set_header Accept-Encoding ""` 让上游返回明文 HTML（否则一行都匹配不到，且没有任何报错） |
+| `keyCode` 设不上 | `new KeyboardEvent()` 构造参数里没有 `keyCode` / `which`，只能 `Object.defineProperty(ev, 'keyCode', {get:()=>kc})` 强行改。很多老作品判断的就是 `e.keyCode` |
+| 双指同时按摇杆 | 单指方案用全局一个 `pointerId`，第二根手指按下会让第一个摇杆停更且**方向键永远卡住**。改为 `joyPid = {joyA, joyB}` 各自记录，同一摇杆被新手指重按时先释放旧手指留下的方向键 |
+| 松手收不到 `pointerup` | 手指滑出元素边界就丢事件。用 `setPointerCapture(e.pointerId)` 把后续事件锁给元素 |
+| 坐标系错位 | 画面整体 `rotate(90°)` 后，屏幕位移和舞台坐标不是同一套。`toStage(dx,dy)` 按 `rot` 做一次旋转换算，否则摇杆方向会跟着转 |
+| 设置模式误触 | `.vpad` 默认 `pointer-events:none`，只有 `.is-edit` 时才 `auto`；设置模式下 `onDown` 只写 `drag` 状态、**不进 `press()`**，从根上杜绝拖动触发按键 |
+| 关了再开丢配置 | `togglePad` 原先在 `nextTick` 里写 `scheme.on`，此时组件已卸载、什么都没存。改为**先**写 `scheme.on = next` **再**翻 `padOn`，并让 `onMounted` 兜底置 `true` |
+
+### 具体改动
+
+| 文件 | 行号 | 改动说明 |
+| --- | --- | --- |
+| `frontend/src/utils/vkeys.js` | 全文（164 行） | **新增**。字段表 + 键值解析 + 方案持久化：`VK_STORAGE_KEY='coc_vpad_v1'`（L14）、`ALIASES`（L16，`space`/`enter`/`ctrl`/`shift`/`alt`/`tab`/`esc`/方向键）、`normalizeField`（L52）、`resolveKey`（L63，产出 `key`/`code`/`keyCode`）、`labelOf`（L77）、`JOY_DEFS`（L83，`joyA`=WASD、`joyB`=方向键）、`QUICK_FIELDS`（L99，面板快捷芯片）、`defaultScheme`（L101）、`loadScheme`（L119，逐字段回填 + 夹取边界 + 按键上限 12 个）、`saveScheme`（L157） |
+| `frontend/src/components/VirtualPad.vue` | 全文（540 行） | **新增**。虚拟按键层：摇杆层（L4-L22）、自定义按键（L23-L33）、设置面板（L36-L100）。指针处理 `onDown`（L210）/`onMove`（L237）/`onUp`（L254）；摇杆方向计算 `updateJoy`（L265，阈值 ±0.35，diff 出本次要按下/松开的方向）；多指隔离 `joyPid`（L125）；引用计数 `counts`（L132，同一字段被多个入口按住时不会提前松开）；增删键 `addField`（L304）/`removeBtn`（L335）；恢复默认 `resetScheme`（L342）；透明度/尺寸滑条（L88、L92，透明 0.15-1 步进 .05、尺寸 44-180）；`defineExpose({releaseAll, scheme})` |
+| `frontend/src/views/ProjectDetail.vue` | L85-L92 | 把 `<VirtualPad>` 放进 **`.stage` 内部**——这样它跟着画面一起旋转，坐标天然等于作品的坐标系 |
+| 同上 | L109-L117 | 全屏侧栏新增两个按钮（仅 `isNarrow` 显示）：「虚拟按键 / 隐藏按键」、「按键设置 / 完成设置」，选中态高亮 `.is-on` |
+| 同上 | L367、L370 | 引入 `VirtualPad`、`resolveKey`、`loadScheme` |
+| 同上 | L466-L474 | `padEditing` / `padOn`（初始值取自 `loadScheme().on`）、`padVisible = isFull && canRun && isNarrow && padOn` |
+| 同上 | L481-L517 | `sendKey(field,down)` 向 iframe `postMessage`；`pingBridge()` 探活（1.5s 无 `pong` 才提示桥接不可用）；`onBridgeMsg` 处理 `pong` 与 `blur`（作品失焦 → `releaseAll` 防卡键） |
+| 同上 | L519-L546 | `togglePad` / `togglePadEdit` / `setPadEditing`；进设置模式与开按键时各 ping 一次 |
+| 同上 | L912、L953、L979、L1001 | 重载 iframe、退出全屏、`fullscreenchange`、按 `Esc` 统一先 `releaseAll()` + 退出设置模式 |
+| 同上 | L1010-L1013 | watch `frameKey`（重载后重新 ping）、watch `isFull`（进全屏 800ms 后 ping） |
+| 同上 | L1020、L1034 | 挂载/卸载 `window.addEventListener('message', onBridgeMsg)` |
+| `E:/programs/nginx/html/coc-key-bridge.js` | 全文（71 行） | **新增**。注入到每个运行页的桥接脚本：收 `{__coc:'key'}` 消息 → 合成 `keydown`/`keyup` → `defineProperty` 改 `keyCode`/`which` → dispatch 到 `document.activeElement \|\| body`；收 `ping` 回 `pong`；`window.blur` 时向父页面报 `blur` |
+| `E:/programs/nginx/conf/sites/coc.conf` | `location ~ ^/api/v1/run/` | 新增 `proxy_set_header Accept-Encoding "";` + `sub_filter_once on;` + `sub_filter '</body>' '<script src="/coc-key-bridge.js"></script></body>';` |
+| 同上 | 新增 `location = /coc-key-bridge.js` | `alias` 到 HTML 目录、`application/javascript`、`max-age=300`，并带 `coc-sec.conf` 安全头 |
+| `frontend/src/utils/platform.js` | L27 | `APP_BUILD` 2.0.4 → **v2.0.5** |
+
+### 字段规则（用户可输入的内容）
+
+| 输入 | 等价按键 | 说明 |
+| --- | --- | --- |
+| `space` | 空格（key `' '` / code `Space` / 32） | 也接受「空格」「空格键」 |
+| `enter` | 回车（13） | 也接受「回车」「回车键」 |
+| `ctrl` / `shift` | 原样 | 别名 `control` / `shiftleft` 等自动归位 |
+| 单字母 `a`-`z` | `KeyA`-`KeyZ` | `keyCode` = 大写字符码 |
+| 单个数字 `0`-`9` | `Digit0`-`Digit9` | 小键盘请用 `numpad1` 形式 |
+| 其他 | 方向键 `up/down/left/right`、`alt`、`tab`、`esc`、`f1`-`f12` | 大小写不敏感 |
+
+### 验证方式（无头 Edge + CDP 双指触摸，脚本在 `E:\Server Data\tmp\coc-verify\verify205*.cjs`）
+
+| 场景 | 结果 |
+| --- | --- |
+| 390×844 Android UA 进全屏 | 舞台 796×390，`matrix(0,1,−1,0,390,0)`（旋转 90°），桥接 `pong` 正常 |
+| 侧栏点「虚拟按键」 | `.vpad` 出现，默认 1 个摇杆（joyA） |
+| 「按键设置」→ 点快捷芯片 `space` | 新增 1 个 `.vkbtn` |
+| 设置模式下拖动摇杆 | `18%,72% → 10.46%,59.18%`，**期间按键日志为空**（不触发按键 ✔） |
+| 两个滑条 | 透明度、尺寸均存在且可拖 |
+| 点「完成」 | 面板消失，localStorage `{on:true, buttons:[{field:'space',…}], joyB:false}` |
+| 空格键按下/松开 | `down ' ' / Space / 32` → `up`，作品侧收到成对事件 |
+| 摇杆推左上 | 同时 `down a(65)` + `down s(83)`，松手全部释放 |
+| 开启 joyB 后双指同时操作 | **`w` 与 `ArrowRight` 同时按下、同时释放**（两摇杆互不干扰 ✔） |
+| 退出全屏 | 虚拟按键层 0 个、全屏态归零、`errs: []` |
+| 桌面 1280×900 回归 | 侧栏只有「重载 / 左旋 / 右旋 / 新窗口 / 退出」，`.vpad` 数量 0（桌面端零影响 ✔） |
+
+### 部署依赖（重要）
+
+虚拟按键**不是纯前端功能**，缺了下面任何一项，手机上点摇杆都不会有反应：
+
+1. `E:/programs/nginx/html/coc-key-bridge.js` 必须存在；
+2. `coc.conf` 的 `location ~ ^/api/v1/run/` 必须带 `Accept-Encoding ""` + `sub_filter`；
+3. 改完 nginx 配置要 `nginx -t` 后 `Restart-Service nginx`；
+4. 自检：`curl https://collectionofcreations.uk/api/v1/run/<id>/ | tail -c 200`，能看到 `<script src="/coc-key-bridge.js"></script>` 即为注入成功。
+
+若桥接不可用，App 侧会在进全屏后 1.5s 给出提示（`pingBridge` 无 `pong`），不会静默失效。
+
+### 备注
+
+- 只有「全屏 + 可运行 HTML + 窄屏 + 用户开启按键」四个条件同时成立才渲染虚拟按键层，普通浏览与桌面端完全不受影响。
+- 方案存在 `localStorage['coc_vpad_v1']`，仅本机有效，不跟随账号；清缓存会回到默认布局。
+- 按键数量上限 12 个，避免误加到糊满屏幕。
+- 详细状态与版本记录见 `docs/PROJECT-STATUS-20261115.md` 第十一章。
+
+---
+
 ## 2026-11-19 · 项目详情页：手机端默认手机版视图 + 电脑版切换 + 全屏横屏与控制侧栏（v2.0.4）
 
 > 本条属于 **COC 五期测试** 的改动，已随 **2.0.4 / versionCode 14** 打包发布。

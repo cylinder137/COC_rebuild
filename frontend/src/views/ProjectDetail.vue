@@ -80,6 +80,16 @@
                       referrerpolicy="no-referrer"
                       :title="`项目预览：${detail.title}`"
                     />
+
+                    <!-- 虚拟按键层：放在 stage 内部，跟着画面一起旋转，坐标即"作品坐标系" -->
+                    <VirtualPad
+                      v-if="padVisible"
+                      ref="padRef"
+                      :editing="padEditing"
+                      :rot="rot"
+                      :send="sendKey"
+                      @update:editing="setPadEditing"
+                    />
                   </div>
                 </div>
 
@@ -96,6 +106,14 @@
                   </button>
                   <aside class="rail" :class="{ open: railOpen }">
                     <button class="rail-btn" @click="reloadFrame"><el-icon><Refresh /></el-icon><span>重载</span></button>
+                    <button v-if="isNarrow" class="rail-btn" :class="{ 'is-on': padOn }" @click="togglePad">
+                      <el-icon><Operation /></el-icon>
+                      <span>{{ padOn ? '隐藏按键' : '虚拟按键' }}</span>
+                    </button>
+                    <button v-if="isNarrow" class="rail-btn" :class="{ 'is-on': padEditing }" @click="togglePadEdit">
+                      <el-icon><Setting /></el-icon>
+                      <span>{{ padEditing ? '完成设置' : '按键设置' }}</span>
+                    </button>
                     <button class="rail-btn" @click="rotateView(-1)"><el-icon><RefreshLeft /></el-icon><span>左旋</span></button>
                     <button class="rail-btn" @click="rotateView(1)"><el-icon><RefreshRight /></el-icon><span>右旋</span></button>
                     <button v-if="canSwitchView" class="rail-btn" @click="toggleViewMode">
@@ -346,8 +364,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
+import VirtualPad from '@/components/VirtualPad.vue'
 import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe } from '@/api'
 import { readDomField } from '@/utils/formDom'
+import { resolveKey, loadScheme } from '@/utils/vkeys'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
@@ -436,6 +456,95 @@ const railOpen = ref(false)
 /** 原生 screen.orientation.lock 是否生效：生效时画面已物理横屏，不能再叠加 CSS 旋转 */
 const nativeLandscape = ref(false)
 let scaleRO = null
+
+/* ---------------- 虚拟按键（仅手机端全屏可用） ----------------
+   作品页在 sandbox="allow-scripts" 的 iframe 里（不授予 allow-same-origin），
+   父页面拿不到 contentDocument，没法直接 dispatchEvent。折中方案：
+   nginx 给 /api/v1/run/ 的 HTML 注入 coc-key-bridge.js，父页面 postMessage 进去，
+   由页面内部的脚本合成 KeyboardEvent（详见 utils/vkeys.js 与 coc-key-bridge.js）。 */
+const padRef = ref(null)
+const padEditing = ref(false)
+const padOn = ref(false)
+const bridgeOk = ref(false)
+let pingTimer = null
+
+/** 上次是否开着虚拟按键：进详情页时恢复（方案本体由组件自己存取） */
+try { padOn.value = !!loadScheme().on } catch (e) { padOn.value = false }
+
+const padVisible = computed(() => isFull.value && canRun.value && isNarrow.value && padOn.value)
+
+function frameEl() {
+  return viewerRef.value?.querySelector('.stage iframe') || null
+}
+
+/** 字段 → 键盘事件 → 作品页（由桥在页面内 synthetic） */
+function sendKey(field, down) {
+  const info = resolveKey(field)
+  const f = frameEl()
+  if (!info || !f) return
+  try {
+    f.contentWindow?.postMessage(
+      { __coc: 'key', type: down ? 'down' : 'up', key: info.key, code: info.code, keyCode: info.keyCode },
+      '*'
+    )
+  } catch (e) { /* 未加载完 / 跨域，忽略 */ }
+}
+
+/** 握手：确认作品页里真的有桥（没有就提示，而不是让用户对着死按键发呆） */
+function pingBridge() {
+  bridgeOk.value = false
+  const f = frameEl()
+  if (!f?.contentWindow) return
+  try { f.contentWindow.postMessage({ __coc: 'key', type: 'ping' }, '*') } catch (e) { /* ignore */ }
+  clearTimeout(pingTimer)
+  pingTimer = setTimeout(() => {
+    if (!bridgeOk.value) {
+      ElMessage.warning('该作品页里还没有按键桥接脚本，虚拟按键暂时无效；刷新页面或等服务端注入生效后再试')
+    }
+  }, 1500)
+}
+
+function onBridgeMsg(e) {
+  const d = e.data
+  if (!d || d.__coc !== 'key') return
+  if (d.type === 'pong') {
+    bridgeOk.value = true
+    clearTimeout(pingTimer)
+    return
+  }
+  // 作品页自己失焦（切后台 / 退全屏）：把还按着的键松开，避免角色一直走
+  if (d.type === 'blur') padRef.value?.releaseAll()
+}
+
+function togglePad() {
+  const next = !padOn.value
+  // 先写进组件里的方案（卸载前），否则关掉后就没人把 on=false 存下来了
+  if (padRef.value) padRef.value.scheme.on = next
+  padOn.value = next
+  if (!next) {
+    padEditing.value = false
+    padRef.value?.releaseAll()
+  }
+  nextTick(() => {
+    if (padOn.value) pingBridge()
+  })
+}
+
+function togglePadEdit() {
+  if (!padOn.value) {
+    padOn.value = true
+    if (padRef.value) padRef.value.scheme.on = true
+  }
+  setPadEditing(!padEditing.value)
+}
+
+function setPadEditing(v) {
+  padEditing.value = !!v
+  // 进出设置都先松键：设置模式里点击/拖动不应触发游戏，退出时也不能留下按住状态
+  padRef.value?.releaseAll()
+  if (padEditing.value) nextTick(pingBridge)
+}
+
 
 const isHtml = computed(() => detail.value?.project_type === 'html')
 /** 只有窄屏 + HTML + 可运行，才需要「手机版/电脑版」这个选择 */
@@ -796,7 +905,12 @@ async function onRemoveComment(c) {
 }
 
 /* ---------------- 预览交互 ---------------- */
-function reloadFrame() { frameKey.value += 1; ElMessage.success('已重新加载') }
+function reloadFrame() {
+  padRef.value?.releaseAll()
+  frameKey.value += 1
+  ElMessage.success('已重新加载')
+  if (padVisible.value) nextTick(() => setTimeout(pingBridge, 600))
+}
 
 /* 全屏：手机端进全屏就自动横屏。
    优先用原生 screen.orientation.lock（手机物理转过去，最自然），
@@ -834,6 +948,9 @@ async function lockNative(orient) {
 }
 
 async function exitFull() {
+  // 先松键再退：虚拟按键层一卸就没人能发 keyup 了，残留会让作品里角色一直走
+  padRef.value?.releaseAll()
+  padEditing.value = false
   isFull.value = false
   railOpen.value = false
   rot.value = 0
@@ -858,6 +975,8 @@ async function rotateView(dir) {
 /** 系统侧退出全屏（返回手势/ESC/F11）时同步状态，别让页面卡在 fixed 遮罩里 */
 function onFullscreenChange() {
   if (!document.fullscreenElement && isFull.value) {
+    padRef.value?.releaseAll()
+    padEditing.value = false
     isFull.value = false
     railOpen.value = false
     rot.value = 0
@@ -879,6 +998,7 @@ function copyLink() {
 }
 function onKey(e) {
   if (e.key !== 'Escape') return
+  if (padEditing.value) { setPadEditing(false); return }
   if (railOpen.value) { railOpen.value = false; return }
   if (isFull.value) exitFull()
 }
@@ -886,12 +1006,18 @@ watch(isFull, (v) => {
   document.body.style.overflow = v ? 'hidden' : ''
   nextTick(updateScale)
 })
+/* 帧重载 / 进全屏后重新握手：作品页重新加载会丢掉桥的状态 */
+watch(frameKey, () => { if (padVisible.value) nextTick(() => pingBridge()) })
+watch(isFull, (v) => {
+  if (v && padOn.value) nextTick(() => setTimeout(pingBridge, 800))
+})
 watch([desktopSim, rot], () => nextTick(updateScale))
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   window.addEventListener('resize', syncNarrow, { passive: true })
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  window.addEventListener('message', onBridgeMsg)
   syncNarrow()
   if (bodyRef.value && typeof ResizeObserver !== 'undefined') {
     scaleRO = new ResizeObserver(() => updateScale())
@@ -905,6 +1031,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('resize', syncNarrow)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  window.removeEventListener('message', onBridgeMsg)
   scaleRO?.disconnect()
   scaleRO = null
   document.body.style.overflow = ''
@@ -1006,6 +1133,10 @@ onUnmounted(() => {
   display: flex; flex-direction: column; gap: 4px;
   padding: 8px 6px; border-radius: var(--r-md) 0 0 var(--r-md);
   background: rgba(18, 18, 22, .9); backdrop-filter: blur(8px);
+  /* 加了「虚拟按键 / 按键设置」后条目变多，横屏高度有限，允许栏内滚动 */
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  scrollbar-width: none;
   transition: transform var(--dur-fast) var(--ease-out);
   padding-right: calc(6px + env(safe-area-inset-right, 0px));
 }
@@ -1017,6 +1148,8 @@ onUnmounted(() => {
 }
 .rail-btn .el-icon { font-size: 17px; }
 .rail-btn:hover { background: rgba(255, 255, 255, .14); }
+.rail-btn.is-on { background: rgba(255, 255, 255, .22); }
+.rail::-webkit-scrollbar { width: 0; height: 0; }
 .rail-btn.is-primary { background: var(--c-primary); }
 .rail-btn.is-primary:hover { background: var(--c-primary-hover); }
 

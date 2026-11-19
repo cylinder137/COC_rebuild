@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [vue()],
+    // 用户内容区部署在 https://.../user/ 下（nginx `location ^~ /user/` → dist-user/），
+    // 产物里的 /assets/* 必须带 /user 前缀，否则会被主站 dist 的 /assets 抢走 → 入口 chunk 404。
+    base: mode === 'user' ? '/user/' : '/',
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
     },

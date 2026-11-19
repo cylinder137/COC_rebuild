@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-19 10:50（GMT+8）· 发布 v2.0.4（手机/电脑视图切换 + 全屏横屏），见第十一章
+> 最近更新：2026-11-19 11:30（GMT+8）· 发布 v2.0.5（手机端全屏虚拟按键：双摇杆 + 自定义按键），见第十二章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -22,7 +22,7 @@
 | 数据库 | `coc_platform`，**27 张表**，Flyway `V1__init.sql` + `V2__password_reset_reject.sql` |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.4 / versionCode 14**（2026-11-19 10:36 打包） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.5 / versionCode 15**（2026-11-19 11:21 打包） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -44,7 +44,8 @@ E:\Project Files\COC_rebuild
 
 - 分支：`main`，HEAD `ba2e3dd`（11-15 已推送，`d3caa3e..ba2e3dd`），工作区干净
 - 2.0.3 的改动已入库，拆成 3 个提交：`b254420` 账号注销接口 / `0947806` 手机端输入框修复 / `ba2e3dd` 文档更新
-- ⚠️ 2.0.4 的改动（`ProjectDetail.vue` 视图切换 + 全屏横屏 + 版本号）**尚未提交**，等实测通过后再入库
+- 2.0.4 的改动已入库（`ec5e10e` 视图切换/全屏横屏 + `4c9acb2` 零散优化与 devlog），已推送 `ba2e3dd..4c9acb2`
+- ⚠️ 2.0.5 的改动（虚拟按键：`VirtualPad.vue`、`utils/vkeys.js`、`ProjectDetail.vue`、`platform.js` + devlog）**尚未提交**，等实测通过后再入库；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
 - 未提交改动（11-15 22:20 现状，`git status --porcelain` 共 28 行）：
 
   ```
@@ -252,13 +253,14 @@ E:\Project Files\COC_rebuild
   | 2.0.2 | 12（与 2.0.1 相同）⚠️ | 11-15 |
   | 2.0.3 | 13 | 11-15 22:19（输入框修复） |
   | **2.0.4** | **14** | 11-19 10:36（视图切换 + 全屏横屏） |
+  | **2.0.5** | **15** | 11-19 11:21（虚拟按键：双摇杆 + 自定义按键） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 / 2.0.4 已按此规则执行：code 13 / 14，从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 / 2.0.5 已按此规则执行：code 13 / 14 / 15，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -306,12 +308,12 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/latest`
-- 本地 `apk-build\dist\`：v1.0 → v2.0.4 共 22 个历史包（含 `coc-app-v2.0.4-20261119-1036.apk` = 最新）
-- 当前线上 `coc-app-2.0.4.apk` = `coc-app-latest.apk` = **3,855,581 B**（2.0.4 / code 14，签名 `CN=Collection of Creations`）
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/latest`
+- 本地 `apk-build\dist\`：v1.0 → v2.0.5 共 23 个历史包（含 `coc-app-v2.0.5-20261119-1121.apk` = 最新）
+- 当前线上 `coc-app-2.0.5.apk` = `coc-app-latest.apk` = **3,864,431 B**（2.0.5 / code 15，签名 `CN=Collection of Creations`，sha256 `1451960d…6bbd`）
 - sha256 `2dfd518fca0f7cd16a507542bc58e9a3bc679add33439cfde2ab095d51e2f843`（公网实下一致）
 - 本地自测下载正常：`http://127.0.0.1:8084/downloads/coc-app-latest.apk` → 200 / 3,855,581 B（对外走 Cloudflare 仍需按 5.4 验字节数）
-- `version.json` / `version.txt` 已同步为 2.0.4 / 14（`updatedAt` 2026-11-19 10:36）
+- `version.json` / `version.txt` 已同步为 2.0.5 / 15（`updatedAt` 2026-11-19 11:21）
 
 ---
 
@@ -522,3 +524,82 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "E:\Server Data\scripts\buil
 3. 点全屏：手机是否**自动转到横屏**（原生锁定）；没转的话画面是否已横向铺满（CSS 兜底）
 4. 全屏右边缘把手 → 点开侧栏 → 左旋/右旋 → 侧栏是否遮住画面但不缩放作品
 5. 覆盖安装 2.0.3 → 2.0.4 是否被拦（code 14 > 13，理论上通过）
+
+---
+
+## 十二、v2.0.5 记录（2026-11-19 11:21）· 手机端全屏虚拟按键
+
+### 12.1 为什么需要它
+
+2.0.4 解决了「手机端能全屏横屏跑作品」，但触摸屏**没有键盘**——靠 `keydown` 操作的作品（WASD 走位、空格跳、数字键放技能）在手机上完全玩不了。2.0.5 补上一层虚拟按键。
+
+### 12.2 架构：三层接力（安全边界不动）
+
+作品跑在 `sandbox="allow-scripts"` 的 iframe 里，**故意不给 `allow-same-origin`**，父页面拿不到 `contentDocument`、也无法 `dispatchEvent`。所以按键必须走：
+
+```
+VirtualPad（父页面/触摸层）
+  → postMessage {__coc:'key', type:'down'|'up', key, code, keyCode}
+  → 作品 iframe 内 coc-key-bridge.js 合成 KeyboardEvent
+  → dispatch 到 document.activeElement || body
+```
+
+桥接脚本由 **nginx `sub_filter` 注入**到 `/api/v1/run/` 的 HTML 响应里（`</body>` 前）。
+
+### 12.3 涉及文件
+
+| 文件 | 说明 |
+| --- | --- |
+| `frontend/src/utils/vkeys.js`（新增，164 行） | 字段表 + 键值解析 + `localStorage['coc_vpad_v1']` 方案持久化；`space`/`enter`/`ctrl`/`shift` 别名，字母 `KeyX`、数字 `DigitN`；按键上限 12 |
+| `frontend/src/components/VirtualPad.vue`（新增，540 行） | 双摇杆（`joyA`=WASD、`joyB`=方向键，各自 `pointerId` 独立）+ 自定义按键 + 设置面板（开关/新增/删除/透明度/尺寸/恢复默认） |
+| `frontend/src/views/ProjectDetail.vue` | 把 `<VirtualPad>` 放进 `.stage`（跟着旋转，坐标 == 作品坐标）；侧栏加「虚拟按键」「按键设置」两个按钮（仅窄屏）；`sendKey` / `pingBridge` / `onBridgeMsg` / `releaseAll` |
+| `E:/programs/nginx/html/coc-key-bridge.js`（新增，71 行） | 桥接脚本：`defineProperty` 覆盖 `keyCode`/`which`（构造函数设不上），`ping`/`pong` 探活，`blur` 上报防卡键 |
+| `E:/programs/nginx/conf/sites/coc.conf` | `location ~ ^/api/v1/run/` 加 `proxy_set_header Accept-Encoding ""` + `sub_filter`；新增 `location = /coc-key-bridge.js` |
+| `frontend/src/utils/platform.js` | `APP_BUILD='v2.0.5'` |
+
+### 12.4 必须记住的四个坑
+
+1. **`sub_filter` 处理不了压缩响应**：没有 `proxy_set_header Accept-Encoding ""` 就一行都匹配不到，而且**不报错**，表现只是"注入没生效"。
+2. **`keyCode` 构造时就设不上**：`new KeyboardEvent()` 不支持 `keyCode`/`which`，必须 `Object.defineProperty` 加 `get`。大量老作品判断的就是 `e.keyCode`。
+3. **双指操作必须按摇杆分别记 `pointerId`**：单指方案里第二根手指按下会让第一个摇杆停更、方向键永远卡住。已改为 `joyPid = {joyA, joyB}`，同一摇杆被新手指重按时先释放旧手指留下的方向。
+4. **`.vpad` 默认 `pointer-events:none`**：只有设置模式（`.is-edit`）才 `auto`；设置模式下 `onDown` 只记拖拽状态、不进 `press()`，从根上保证"摆布局不触发按键"。
+
+### 12.5 发布
+
+- `versionName 2.0.5` / `versionCode 15`；`APP_BUILD='v2.0.5'` 同步
+- APK：`apk-build\dist\coc-app-v2.0.5-20261119-1121.apk`（3,864,431 B，sha256 `1451960d69dcfcd20cf328b7036c4955a10bf06b795b064b3b12f6a290a26bbd`）
+- 线上：`downloads\coc-app-2.0.5.apk` = `coc-app-latest.apk`；`version.json` 已更新（本地 + 公网均校验 size/sha256 一致）
+
+### 12.6 部署自检（缺任一项，手机上点摇杆都没反应）
+
+1. `E:/programs/nginx/html/coc-key-bridge.js` 存在；
+2. `coc.conf` 的运行页 location 带 `Accept-Encoding ""` + `sub_filter`；
+3. `nginx -t` 通过后 `Restart-Service nginx`；
+4. `curl https://collectionofcreations.uk/api/v1/run/<id>/ | tail -c 200` 能看到 `<script src="/coc-key-bridge.js"></script>`。
+
+### 12.7 待实测点
+
+1. 真机进作品全屏 → 侧栏点「虚拟按键」→ 摇杆是否出现、推摇杆作品里的人物是否动
+2. 侧栏点「按键设置」→ 输入 `space` 新增 → 拖动按钮 → **拖动过程中作品是否有反应**（应该没有）
+3. 选中按钮拖透明度/尺寸滑条，效果是否即时
+4. 开两个摇杆，**两指同时推** → 是否两个方向同时生效、松手是否都松开
+5. 点「完成」退出设置 / 退出全屏 → 重进全屏，布局是否还原
+6. 覆盖安装 2.0.4 → 2.0.5 是否被拦（code 15 > 14，理论上通过）
+
+### 12.8 线上事故修复（同日 · 下载 404 根因）
+
+**现象**：`/downloads` 显示 v2.0.5，点下载返回 `{"code":404,"message":"接口或资源不存在","data":null}`。
+
+**根因**：`frontend/src/utils/format.js` 的 `API_ORIGIN` 写的是
+`new URL(base, 'http://127.0.0.1:8090').origin`。生产 `.env.production` 的 `VITE_API_BASE=/api/v1` 是**相对**基址，
+`new URL('/api/v1', 'http://127.0.0.1:8090')` 的 `origin` 就等于这个「解析基准」→ 产物里写死 `http://127.0.0.1:8090`。
+于是 `fileUrl()` 生成 `http://127.0.0.1:8090/downloads/*.apk`：本机访问 → 打到后端 8090 → JSON 404；远程访问 → 连自己的回环地址 → 失败。
+同一个 `API_ORIGIN` 还喂给 `runUrlOf()`，封面 / 头像 / 沙箱运行页在远程设备上同样全废。
+
+**修法**：
+- `format.js`：`ORIGIN`（原生壳）分支不动；绝对基址取其 `origin`；**相对基址直接返回 `''`**，让 `fileUrl` 产出相对路径走 nginx。
+- `vite.config.js`：加 `base: mode === 'user' ? '/user/' : '/'`（`dist-user` 挂在 `/user/` 下，原来资源写 `/assets/*` 被主站抢走 → 入口 chunk 404）。
+
+**验证**：`grep -rl "127.0.0.1:8090" dist/assets/*.js` 仅剩 `AppState` 的报错文案；`/downloads/coc-app-2.0.5.apk` 200 / 3,864,431 B；`/user/` 及其 4 个资源全 200；公网 index 已切 `index-BG7EI2uG.js`。
+
+**注意**：APK 不受影响（原生壳走 `ORIGIN` 分支），无需重打包；网页端需硬刷新（Ctrl+F5）清掉旧 chunk 缓存。

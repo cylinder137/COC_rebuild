@@ -75,8 +75,14 @@ const API_ORIGIN = (() => {
   // 与 api/http.js 保持同一口径：原生壳(Capacitor)里页面源是 https://localhost，
   // 所有相对路径都会打到壳内部 → 封面/头像/沙箱 iframe 全部失效，必须改成线上绝对源。
   if (ORIGIN) return ORIGIN
+  // 生产构建 VITE_API_BASE=/api/v1 是**相对**基址 → 与页面同源，这里必须返回空串，
+  // 让 fileUrl 生成相对路径（/downloads/x.apk、/avatars/x.png 由 nginx 直出）。
+  // ⚠️ 曾经写成 new URL(base, 'http://127.0.0.1:8090').origin：相对基址下这个「解析基准」
+  // 会被当成真实源返回，产物里就写死了 http://127.0.0.1:8090 —— 远程设备上封面/头像全裂、
+  // 下载链接打到后端 8090 的 /downloads/* 变成 {"code":404,...}。
   const base = import.meta.env.VITE_API_BASE || ''
-  try { return base ? new URL(base, 'http://127.0.0.1:8090').origin : '' } catch (e) { return '' }
+  if (!/^https?:\/\//i.test(base)) return ''
+  try { return new URL(base).origin } catch (e) { return '' }
 })()
 
 export function fileUrl(p) {
