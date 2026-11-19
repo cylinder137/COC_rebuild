@@ -15,7 +15,7 @@
 | 维度 | 现状 |
 | --- | --- |
 | 仓库根 | `E:\Project Files\COC_rebuild` |
-| 分支 | `main`，HEAD `3615b91`（2026-11-19，2.1.1 已推送 `5275bda..3615b91`）；**2.1.2 的改动在工作区未提交** |
+| 分支 | `main`，HEAD `4373fba`（2026-11-19，2.1.2 已推送 `3615b91..4373fba`）；工作区干净 |
 | 远程 | `https://github.com/cylinder137/COC_rebuild.git`（已推送，ahead=0） |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router（`createWebHistory`） |
 | 后端 | Java 21 + Spring Boot 3.5 + MyBatis + MySQL 8 + Flyway |
@@ -49,7 +49,7 @@ E:\Project Files\COC_rebuild
 - 2.0.6 的改动已入库并推送（`cce4cb7`：素材库 + 项目/素材系列 + mcstructure 下线 + 后台 bug 反馈面板；`bc3e2aa..cce4cb7`，首次 push 遇 `OpenSSL SSL_read: unexpected eof` 重试即通）
 - 2.1.0 的改动已入库并推送（`5275bda`：EP 变量特异性修复 + 文案清理 + 下载页 2.1.0 条目 + `APP_BUILD`；`cce4cb7..5275bda`）
 - 2.1.1 的改动已入库并推送（`3615b91`：投稿第一步类型选择恢复 + `.upload-actions` 变量修复 + 下载页 2.1.1 条目；`5275bda..3615b91`）
-- ⚠️ **2.1.2 的改动（`SITE_ORIGIN` 素材直链修复 + 新增 `AssetUpload.vue` 上传页 + 路由/侧栏入口 + 下载页 2.1.2 条目）在工作区未提交**
+- 2.1.2 的改动已入库并推送（`4373fba`：`SITE_ORIGIN` 素材直链修复 + 新增 `AssetUpload.vue` 上传页 + 路由/侧栏入口 + 下载页 2.1.2 条目；`3615b91..4373fba`，本次 push 一次通过）
 - 提交规范提醒：同一工作区曾出现过**并行会话**同时改 `bug_feedback` 相关文件的情况（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue` 等）。**提交前务必按路径挑拣**，别把对方未完成的改动一起 commit。
 - 下面这份清单是 11-15 的**历史快照**（`git status --porcelain` 共 28 行），仅作参考，不代表当前工作区：
 
@@ -342,7 +342,7 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 | 1 | **App 端"无法创建项目草稿"** | ✅ **已定位并修复（v2.0.3）**：根因是输入框容器失效——App 里中文输入法打字，输入框有字但 `v-model` 收不到值，`title/summary` 恒为空，按钮 `:disabled` 死锁，请求从未发出（nginx 日志里 Android UA 零 `POST /api/v1/projects` 即为证据）。改法见第十章。**待用户装 2.0.3 实测确认** |
 | 2 | **APK 下载被 CF 链路截断** | 实测 1,015,808/3,850,562 B；下载后需校验字节数，必要时用系统浏览器/下载器重试（2.0.3 本地直连 3,853,343 B 正常，对外链路仍待验） |
 | 3 | **versionCode 回退与重复**（2.0=11 < 1.11=12；2.0.1 与 2.0.2 同为 12） | ✅ 2.0.3 已用 code=13，规则写入 5.1；后续继续 +1 |
-| 4 | 未提交改动堆积 | 2.0.3~2.1.1 已入库推送（HEAD `3615b91`）；**2.1.2 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
+| 4 | 未提交改动堆积 | ✅ 2.0.3~2.1.2 全部入库并推送（HEAD `4373fba`），工作区干净 |
 | 5 | ⚠️ **APK 打包后必须解包自检** | 2.0.6 曾因 `www/` 残留旧前端，打出的包底栏还是「MC结构」（v2.1.0 已修）。**以后每次出包都要 `unzip -p app-release.apk assets/public/index.html` 核对入口 hash 与 `frontend/dist` 一致，并确认新分包存在**，详见第十四章 |
 | 6 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
 | 7 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
