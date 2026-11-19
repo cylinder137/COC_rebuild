@@ -43,9 +43,29 @@ public class StorageService {
         Files.createDirectories(root.resolve("projects"));
         Files.createDirectories(root.resolve("covers"));
         Files.createDirectories(root.resolve("avatars"));
+        Files.createDirectories(root.resolve("assets"));
         Files.createDirectories(root.resolve("uploads").resolve("tmp"));
         Files.createDirectories(root.resolve("uploads").resolve("staging"));
         log.info("存储根目录就绪: {}", root);
+    }
+
+    /**
+     * 素材根目录（assets/）。
+     * <p>nginx 把 {@code /media/} 直接 alias 到这里，所以素材直链是
+     * {@code {origin}/media/{assetId}/{fileName}} —— 必须是「存储里的真实一层目录」，
+     * 否则改路径就会让所有已发布 HTML 里引用的素材链接一起失效。
+     */
+    public Path assetsDir() throws IOException {
+        Path p = root.resolve("assets");
+        Files.createDirectories(p);
+        return p;
+    }
+
+    /** 单个素材目录：assets/{assetId} */
+    public Path assetDir(long assetId) throws IOException {
+        Path p = assetsDir().resolve(String.valueOf(assetId));
+        Files.createDirectories(p);
+        return p;
     }
 
     public Path getRoot() {

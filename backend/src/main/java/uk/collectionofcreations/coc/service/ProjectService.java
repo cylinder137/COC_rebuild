@@ -27,6 +27,8 @@ import java.util.Set;
 public class ProjectService {
 
     private static final Set<String> TYPES = Set.of("html", "scratch", "structure");
+    /** 已下线类型：历史项目仍可读、可改，但不再允许新建（五期：MC 结构 → 素材库） */
+    private static final Set<String> RETIRED_TYPES = Set.of("structure");
     private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00");
 
@@ -36,10 +38,12 @@ public class ProjectService {
     private final InteractionMapper interactionMapper;
     private final ImMapper imMapper;
     private final FileService fileService;
+    private final SeriesService seriesService;
     private final uk.collectionofcreations.coc.storage.StorageService storageService;
 
     public ProjectService(ProjectMapper projectMapper, CategoryMapper categoryMapper, ViewMapper viewMapper,
                           InteractionMapper interactionMapper, ImMapper imMapper, FileService fileService,
+                          SeriesService seriesService,
                           uk.collectionofcreations.coc.storage.StorageService storageService) {
         this.projectMapper = projectMapper;
         this.categoryMapper = categoryMapper;
@@ -47,6 +51,7 @@ public class ProjectService {
         this.interactionMapper = interactionMapper;
         this.imMapper = imMapper;
         this.fileService = fileService;
+        this.seriesService = seriesService;
         this.storageService = storageService;
     }
 
@@ -228,6 +233,31 @@ public class ProjectService {
         author.put("avatar_path", project.get("author_avatar"));
         data.put("author", author);
         data.put("is_author", isAuthor);
+        // 所属项目系列 + 同系列的其他项目（详情页做「系列导航」）
+        Object seriesId = project.get("series_id");
+        data.put("series_id", seriesId);
+        data.put("series_name", project.get("series_name"));
+        data.put("series_is_public", project.get("series_is_public"));
+        if (seriesId != null) {
+            List<Map<String, Object>> siblings = new ArrayList<>();
+            for (Map<String, Object> s : projectMapper.listBySeries(((Number) seriesId).longValue())) {
+                boolean published = s.get("status") != null && ((Number) s.get("status")).intValue() == 2;
+                // 同系列里未发布的项目不能泄漏给访客，只给作者/管理员看
+                if (!published && !isAuthor && !isAdmin) {
+                    continue;
+                }
+                Map<String, Object> brief = new LinkedHashMap<>();
+                brief.put("project_id", s.get("project_id"));
+                brief.put("title", s.get("title"));
+                brief.put("summary", s.get("summary"));
+                brief.put("cover_path", s.get("cover_path"));
+                brief.put("project_type", s.get("project_type"));
+                brief.put("status", s.get("status"));
+                brief.put("is_current", ((Number) s.get("project_id")).longValue() == projectId);
+                siblings.add(brief);
+            }
+            data.put("series_projects", siblings);
+        }
 
         List<Map<String, Object>> files = projectMapper.listFilesByProject(projectId);
         List<Map<String, Object>> fileBrief = new ArrayList<>();
@@ -364,11 +394,15 @@ public class ProjectService {
         String title = Params.requireStr(body, "title", "标题");
         String type = Params.requireStr(body, "project_type", "项目类型");
         if (!TYPES.contains(type)) {
-            throw BizException.badRequest("项目类型只支持 html / scratch / structure");
+            throw BizException.badRequest("项目类型只支持 html / scratch");
+        }
+        if (RETIRED_TYPES.contains(type)) {
+            throw BizException.badRequest("MC 结构板块已下线：.mcstructure 等结构文件请到「素材」里上传，再在作品里引用其直链");
         }
         if (title.length() > 100) {
             throw BizException.badRequest("标题过长（<=100 字）");
         }
+        Long seriesId = resolveSeriesId(body, uid);
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("author_id", uid);
         p.put("title", title);
@@ -376,6 +410,7 @@ public class ProjectService {
         p.put("description", Params.str(body, "description"));
         p.put("project_type", type);
         p.put("category_id", Params.lng(body, "category_id"));
+        p.put("series_id", seriesId);
         p.put("cover_path", Params.str(body, "cover_path"));
         p.put("status", 0);
         p.put("audit_mode", "html".equals(type) ? "manual" : "auto");
@@ -387,6 +422,22 @@ public class ProjectService {
         data.put("status", 0);
         data.put("audit_mode", p.get("audit_mode"));
         return data;
+    }
+
+    /**
+     * 解析「归属项目系列」：可以传已有 series_id，也可以传 new_series_name 就近建一个。
+     * 传进来的系列必须属于当前用户，否则 403（防止挂到别人的系列里）。
+     */
+    private Long resolveSeriesId(Map<String, Object> body, long uid) {
+        Long seriesId = Params.lng(body, "series_id");
+        String newName = Params.str(body, "new_series_name");
+        if (seriesId == null && newName != null && !newName.isBlank()) {
+            seriesId = seriesService.ensureByName(SeriesService.Kind.PROJECT, uid, newName, false);
+        }
+        if (seriesId != null) {
+            seriesService.requireOwn(SeriesService.Kind.PROJECT, seriesId, uid);
+        }
+        return seriesId;
     }
 
     @Transactional
@@ -405,6 +456,15 @@ public class ProjectService {
         p.put("project_type", type);
         p.put("category_id", Params.lng(body, "category_id") != null ? Params.lng(body, "category_id") : project.get("category_id"));
         p.put("cover_path", Params.str(body, "cover_path"));
+        // 系列：显式传 null / 0 / 空串 表示「移出系列」，不传则保持原样
+        if (body.containsKey("series_id")) {
+            Object raw = body.get("series_id");
+            if (raw == null || "".equals(raw) || "0".equals(String.valueOf(raw))) {
+                p.put("clear_series", true);
+            } else {
+                p.put("series_id", resolveSeriesId(body, uid));
+            }
+        }
         projectMapper.updateProjectBasic(p);
         if (body.get("tags") != null) {
             categoryMapper.deleteProjectTags(projectId);
@@ -473,6 +533,8 @@ public class ProjectService {
         q.put("author_id", uid);
         q.put("limit", size);
         q.put("offset", Params.offset(page, size));
+        // 前端可能传 1 / "1" / true，统一成 Boolean，否则 Mapper 里 no_series == true 判断不成立
+        q.put("no_series", Params.bool(q, "no_series"));
         List<Map<String, Object>> list = projectMapper.listMine(q);
         long total = projectMapper.countMine(q);
         Map<String, Object> data = new LinkedHashMap<>();

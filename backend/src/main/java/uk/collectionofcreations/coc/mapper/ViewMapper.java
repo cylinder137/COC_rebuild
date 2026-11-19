@@ -48,4 +48,28 @@ public interface ViewMapper {
     /** 今日全平台浏览量 */
     @Select("SELECT IFNULL(SUM(view_count), 0) FROM project_view_daily WHERE stat_date = CURDATE()")
     long todayViewsTotal();
+
+    /** 全平台最近 N 天每日浏览量（跨项目汇总） */
+    @Select("SELECT DATE_FORMAT(stat_date, '%Y-%m-%d') AS stat_key, SUM(view_count) AS cnt FROM project_view_daily "
+            + "WHERE stat_date >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) GROUP BY DATE_FORMAT(stat_date, '%Y-%m-%d')")
+    List<Map<String, Object>> dailyViewsTotal(Map<String, Object> param);
+
+    /** 全平台最近 N 小时每小时浏览量（跨项目汇总） */
+    @Select("SELECT DATE_FORMAT(stat_hour, '%Y-%m-%d %H:00') AS stat_key, SUM(view_count) AS cnt FROM project_view_hourly "
+            + "WHERE stat_hour >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'), INTERVAL #{hours} HOUR) "
+            + "GROUP BY DATE_FORMAT(stat_hour, '%Y-%m-%d %H:00')")
+    List<Map<String, Object>> hourlyViewsTotal(Map<String, Object> param);
+
+    /** 全平台最近 N 天评论数（跨项目汇总） */
+    @Select("SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS stat_key, COUNT(*) AS cnt FROM comment "
+            + "WHERE is_deleted = 0 AND created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY) "
+            + "GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')")
+    List<Map<String, Object>> dailyCommentsTotal(Map<String, Object> param);
+
+    /** 全平台最近 N 小时评论数（跨项目汇总） */
+    @Select("SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS stat_key, COUNT(*) AS cnt FROM comment "
+            + "WHERE is_deleted = 0 "
+            + "AND created_at >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'), INTERVAL #{hours} HOUR) "
+            + "GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00')")
+    List<Map<String, Object>> hourlyCommentsTotal(Map<String, Object> param);
 }

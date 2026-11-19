@@ -171,16 +171,16 @@ function connectWs() {
     } catch (e) { /* 忽略非 JSON */ }
   }
   ws.onclose = () => {
-    wsState.value = { text: '实时连接已断开，已切换为轮询', cls: 'off' }
+    wsState.value = { text: '实时通道打了个盹儿，先用慢速刷新顶着', cls: 'off' }
     if (wsRetry++ < 3) setTimeout(connectWs, 3000 * wsRetry)
-    else fallbackPolling('实时连接不可用，已切换为轮询')
+    else fallbackPolling('实时通道暂时不通，先自动刷新着')
   }
-  ws.onerror = () => { wsState.value = { text: '实时连接异常（后端 WS 可能未启动）', cls: 'off' } }
+  ws.onerror = () => { wsState.value = { text: '信号不太稳，正在努力连回来…', cls: 'off' } }
 }
 
 function fallbackPolling(msg) {
   if (pollTimer) return
-  wsState.value = { text: '实时连接不可用，已切换为 15s 轮询', cls: 'warn' }
+  wsState.value = { text: '实时通道暂时不通，先用 15s 刷新顶着', cls: 'warn' }
   pollTimer = setInterval(() => { loadConvs(true); if (active.value) loadMessages(false) }, 15000)
 }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }

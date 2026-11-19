@@ -198,36 +198,7 @@ public class UploadService {
 
         Path sourceFile;
         boolean instant = session.get("instant_ref_project_file_id") != null;
-        if (instant) {
-            Map<String, Object> ref = projectMapper.findFileById(((Number) session.get("instant_ref_project_file_id")).longValue());
-            sourceFile = storageService.resolveStored(String.valueOf(ref.get("storage_path")));
-            if (sourceFile == null || !Files.exists(sourceFile)) {
-                throw BizException.notFound("秒传命中的文件已不存在，请重新上传");
-            }
-        } else {
-            int total = ((Number) session.get("total_chunks")).intValue();
-            List<Integer> uploaded = parseChunks(session.get("uploaded_chunks"));
-            if (uploaded.size() < total) {
-                throw new BizException(1003, "分片不完整（已收 " + uploaded.size() + "/" + total + "），请续传完成后再提交");
-            }
-            Path merged = storageService.tmpDir().resolve(sessionId + "_" + fileName);
-            try {
-                storageService.mergeParts(storageService.stagingDir(sessionId), total, merged);
-            } catch (IOException e) {
-                throw new BizException(500, "分片合并失败: " + e.getMessage(), 500);
-            }
-            String expected = (String) session.get("sha256");
-            try {
-                String actual = storageService.sha256(merged);
-                if (expected != null && !expected.equalsIgnoreCase(actual)) {
-                    Files.deleteIfExists(merged);
-                    throw new BizException(1005, "文件校验失败（sha256 不一致）：期望 " + expected + "，实际 " + actual);
-                }
-            } catch (IOException e) {
-                throw new BizException(500, "文件校验失败: " + e.getMessage(), 500);
-            }
-            sourceFile = merged;
-        }
+        sourceFile = materialize(sessionId, session);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("upload_session_id", sessionId);
@@ -450,6 +421,49 @@ public class UploadService {
             uploadMapper.updateBuildTask(update);
         }
         return taskId;
+    }
+
+    /**
+     * 把会话真正变成磁盘上的一个文件：秒传命中则返回被引用的正式文件，
+     * 否则按分片号合并到 uploads/tmp 并校验 sha256。
+     * <p>项目源码与素材两条链路共用，避免分片/校验逻辑写两遍走两套 bug。
+     */
+    public Path materialize(long sessionId, Map<String, Object> session) {
+        Object refId = session.get("instant_ref_project_file_id");
+        if (refId != null) {
+            Map<String, Object> ref = projectMapper.findFileById(((Number) refId).longValue());
+            if (ref == null) {
+                throw BizException.notFound("秒传命中的文件已不存在，请重新上传");
+            }
+            Path p = storageService.resolveStored(String.valueOf(ref.get("storage_path")));
+            if (p == null || !Files.exists(p)) {
+                throw BizException.notFound("秒传命中的文件已不存在，请重新上传");
+            }
+            return p;
+        }
+        String fileName = String.valueOf(session.get("file_name"));
+        int total = ((Number) session.get("total_chunks")).intValue();
+        List<Integer> uploaded = parseChunks(session.get("uploaded_chunks"));
+        if (uploaded.size() < total) {
+            throw new BizException(1003, "分片不完整（已收 " + uploaded.size() + "/" + total + "），请续传完成后再提交");
+        }
+        Path merged = storageService.tmpDir().resolve(sessionId + "_" + fileName);
+        try {
+            storageService.mergeParts(storageService.stagingDir(sessionId), total, merged);
+        } catch (IOException e) {
+            throw new BizException(500, "分片合并失败: " + e.getMessage(), 500);
+        }
+        String expected = (String) session.get("sha256");
+        try {
+            String actual = storageService.sha256(merged);
+            if (expected != null && !expected.equalsIgnoreCase(actual)) {
+                Files.deleteIfExists(merged);
+                throw new BizException(1005, "文件校验失败（sha256 不一致）：期望 " + expected + "，实际 " + actual);
+            }
+        } catch (IOException e) {
+            throw new BizException(500, "文件校验失败: " + e.getMessage(), 500);
+        }
+        return merged;
     }
 
     private Map<String, Object> requireSession(long sessionId, long uid) {

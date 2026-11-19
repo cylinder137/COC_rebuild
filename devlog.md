@@ -4,6 +4,198 @@
 
 ---
 
+## 2026-11-19 · v2.0.6：下线 mcstructure 板块、上线「素材库」与项目/素材系列
+
+> 本次是五期测试里体量最大的一次结构调整：**新增一套素材体系全面替代原来的 MC 结构板块**，同时给项目与素材都加上「系列」这一层归类维度。网页端已重建上线，App 打包为 **2.0.6（versionCode 16）** 上架官网。
+
+### 一、改动目的
+
+1. **原 mcstructure 板块定位尴尬**：用户上传 `.mcstructure` 后只能下载回去，平台上既不能预览也不能在 HTML 项目里引用，实际使用率极低。
+2. **用户做 HTML 项目缺素材**：想放一张图、一段 BGM、一个视频，只能外链到第三方图床/网盘，随时可能挂掉，也没有统一的地方管理。
+3. **项目和素材缺少体系化管理**：一个作者做了「物理演示程序」系列十来个作品，列表里只能靠标题自己认，没有分组概念。
+
+因此本次把「结构文件」这一档整体换成**素材库**：素材 = 图片 / GIF / 视频 / 音频 / JSON，上传后拿到的是**服务器直链**，可以直接写进自己 HTML 的 `<img src>`、`<audio src>`；同时给项目和素材各加一套「系列」分组。
+
+### 二、mcstructure 板块下线
+
+采取「**只停入口、不删数据**」的软下线策略：
+
+| 位置 | 处理 |
+| --- | --- |
+| `frontend/src/views/Home.vue` | 类型入口 `structure` 整块换成 `{ to: '/materials', label: '素材库' }`，点击直接跳素材库 |
+| `frontend/src/components/BottomTabBar.vue` | 手机底栏「MC结构」tab 换成「素材」→ `/materials` |
+| `frontend/src/views/Upload.vue` | 投稿类型列表去掉 structure；步骤一说明改为「HTML / Scratch」 |
+| `frontend/src/utils/format.js` | `isAutoApproved()` 由 `type === 'scratch' || type === 'structure'` 收敛为只认 `scratch` |
+| `backend/.../service/ProjectService.java` | 新增 `RETIRED_TYPES = Set.of("structure")`，`createDraft` 命中直接抛 400：`MC 结构板块已下线：.mcstructure 等结构文件请到「素材」里上传，再在作品里引用其直链` |
+| `frontend/src/views/ProjectDetail.vue` | 历史 structure 项目的类型兜底文案改为「板块已下线，文件仍可下载」 |
+| `V4__assets_and_series.sql` | `project.project_type` 枚举**保留** `structure`，历史项目数据不丢、链接不断 |
+
+> 取舍说明：没有做 `ALTER TABLE ... MODIFY ENUM` 删值，也没有物理删项目——已发布的作品链接一旦 404 对作者是不可接受的，历史 structure 项目仍能正常打开和下载源文件。
+
+### 三、数据结构（V4 迁移）
+
+`backend/src/main/resources/db/migration/V4__assets_and_series.sql`
+
+```sql
+project_series(series_id PK, user_id FK→user, name VARCHAR(80), intro VARCHAR(255),
+               is_public TINYINT, created_at, updated_at,
+               UNIQUE(user_id, name))
+asset_series  (同上结构，独立表——项目系列只装项目，素材系列只装素材)
+
+ALTER TABLE project ADD series_id BIGINT NULL
+  → FK project_series ON DELETE SET NULL，索引 (series_id, status, is_deleted)
+
+asset(asset_id PK, user_id FK→user, series_id FK→asset_series ON DELETE SET NULL,
+      name VARCHAR(120), file_name VARCHAR(255), asset_type ENUM('image','gif','video','audio','json'),
+      mime, file_size, sha256, storage_path, is_public TINYINT, is_deleted TINYINT,
+      created_at, updated_at)
+  → 索引 idx_asset_user / idx_asset_series / idx_asset_public / idx_asset_type / idx_asset_sha
+
+ALTER TABLE upload_session ADD kind ENUM('project','asset') DEFAULT 'project'
+```
+
+几个关键设计点：
+
+- **系列删除时子项不跟着删**（`ON DELETE SET NULL`）：用户删掉「物理演示系列」，里面的项目回到「未归系列」，不会连带丢作品。
+- **系列名在同一用户下唯一**（`UNIQUE(user_id, name)`），配合「上传时可直接新建系列」的 `ensureByName` 语义：填一个已存在的名字 = 归入该系列，而不是报错。
+- **`asset.storage_path = assets/{asset_id}/{file_name}`**：保留用户原始文件名（清洗后），这样直链可读、也能被浏览器按扩展名正确识别。
+- **`upload_session.kind`**：素材和项目源码复用同一套分片上传协议，只在 `complete` 阶段按 kind 分流，避免再写一套分片上传。
+
+> 按用户要求「优先用系列 id 找 user_id，再用 user_id + asset_id 联合查下属素材/项目」：`SeriesMapper.listByUser` / `AssetMapper.listMine` / `ProjectMapper.listBySeries` 全部以 `user_id` 为第一过滤条件走复合索引，`AssetService` 与 `ProjectService` 在变更前统一走 `requireOwn(uid, ...)` 校验归属，杜绝越权改别人的系列/素材。
+
+### 四、后端新增模块
+
+| 文件 | 说明 |
+| --- | --- |
+| `mapper/SeriesMapper.java`（新） | 用 `${table}` / `${child}` / `${idCol}` 占位复用两套系列 SQL（`insert` / `findById` / `listByUser` 带 `item_count` 子查询 / `listPublicByUser` / `update` / `delete` / `detachChildren` / `attachChild` / `countByUser` / `findByUserName`）；占位值只来自 `SeriesService.Kind` 枚举白名单，**不接受请求输入**，无注入风险 |
+| `service/SeriesService.java`（新） | `Kind` 枚举 `PROJECT`/`ASSET`；`parseKind()` 兼容 `project/projects/项目/项目系列` 与 `asset/assets/素材/素材系列`；`listMine` / `listPublicOfUser` / `create`（每人上限 50，`DuplicateKeyException` → 「已有同名系列」）/ `update` / `delete`（先 `detachChildren` 再删）/ `ensureByName`（找不到就建，`makePublic` 跟随本次上传的公开性） |
+| `mapper/AssetMapper.java`（新） | `insert` / `updateStored` / `findById` / `listPublic` / `countPublic` / `listMine` / `countMine` / `updateMeta`（动态：改名、改公开性、`clear_series` 置 NULL、改 series_id）/ `softDelete` / `countByUser` / `countPublicByUser`；`listMine`/`countMine` 支持 `no_series == true` 过滤「未归系列」 |
+| `service/AssetService.java`（新，约 470 行） | 类型白名单 `EXT_TYPE` / `EXT_MIME`（png/jpg/jpeg/webp/bmp/avif/ico→image、gif→gif、mp4/webm/mov/m4v→video、mp3/wav/ogg/m4a/aac/flac→audio、json→json，**故意排除 html/svg/js**，防止素材库被当成二次托管入口）；单文件上限 300MB；`initUpload` → `completeUpload`（校验 owner + `kind=='asset'`，解析 series_id / new_series_name，`uploadService.materialize()` 落盘，写 asset 行，把文件搬/拷到 `assets/{asset_id}/{file_name}`，回写 `storage_path` 与真实直链 url）；`listPublic` / `listMine` / `detail`（私有素材非本人一律 404）/ `update` / `delete`（软删）/ `mediaUrl()` / `sanitize()` / `uniqueTarget()` |
+| `controller/AssetController.java`（新） | `/api/v1/assets`：`GET ""`（公开广场）、`GET /mine`、`GET /{id}`、`POST /upload/init`、`POST /upload/{session_id}/complete`、`PUT /{id}`、`DELETE /{id}` |
+| `controller/SeriesController.java`（新） | `/api/v1/series`：`GET ""?kind=`、`GET /public?kind=&user_id=`、`POST ""`、`PUT /{id}`、`DELETE /{id}?kind=` |
+| `storage/StorageService.java` | `init()` 额外建 `assets/` 目录；新增 `assetsDir()` / `assetDir(assetId)` |
+| `mapper/UploadMapper.java` | `insertSession` 写入 `kind`（`IFNULL(#{kind}, 'project')`）、`findSession` 带出 `kind` |
+| `service/UploadService.java` | 把「合并分片 + 校验 sha256 / 秒传引用」抽成 `materialize(sessionId, session)`，项目与素材共用；`complete()` 改为调用它 |
+| `service/ProjectService.java` | 新增 `RETIRED_TYPES`；`createDraft`/`updateDraft` 支持 `series_id` 与 `new_series_name`；`detail()` 追加 `series_id` / `series_name` / `series_is_public` 与同系列兄弟项目 `series_projects`（未发布的只对作者与管理员可见）；`myProjects()` 归一化 `no_series` |
+| `mapper/ProjectMapper.java` | `findProjectById` LEFT JOIN `project_series` 带出系列名与公开性；新增 `listBySeries`；`insertProject` 写 `series_id`；`updateProjectBasic` 支持 `series_id` / `clear_series`；`listMine`/`countMine` 带出 `series_id`/`series_name` 并支持 `no_series` |
+| `auth/AuthInterceptor.java` | 登录白名单补充：`GET/POST:/api/v1/series`、`PUT/DELETE:/api/v1/series/*`、`GET:/api/v1/assets/mine`、`POST:/api/v1/assets/upload/init`、`POST:/api/v1/assets/upload/*/complete`、`PUT/DELETE:/api/v1/assets/*` |
+
+### 五、素材直链（核心能力）
+
+nginx 直接开一个静态 location，绕过后端：
+
+```nginx
+location ^~ /media/ {
+    alias "E:/Server Data/coc-platform/assets/";
+    expires 30d;
+    add_header Cache-Control "public, max-age=2592000";
+    add_header X-Content-Type-Options "nosniff" always;
+    autoindex off;
+}
+```
+
+于是 `assets/{asset_id}/{file_name}` 对应的公开地址就是：
+
+```
+https://collectionofcreations.uk/media/{asset_id}/{file_name}
+```
+
+用户在前端点「复制链接」拿到的就是这一条，可以**直接贴进自己 HTML 的 `<img src>` / `<audio src>` / `<video src>`**，不经过任何后端接口、不受登录态影响。
+
+> **公开性语义**（重要，已在前端页面与本文档说明）：`is_public` 只控制**是否出现在素材广场、是否能被列表接口检索到**；直链本身对拿到 URL 的人是开放的。这是刻意的取舍——素材链接要嵌进已发布的 HTML 里，如果直链还要鉴权，用户的作品就会集体裂图。因此删除素材做的是**软删**（`is_deleted=1`），文件留在磁盘上，历史 HTML 引用的图片不会突然 404。
+
+### 六、前端新增/改动
+
+| 文件 | 说明 |
+| --- | --- |
+| `api/index.js` | 新增 `seriesApi`（`mine(kind)` / `publicOf(userId, kind)` / `create` / `update` / `remove`）与 `assetApi`（`list` / `mine` / `detail` / `initUpload` / `completeUpload` / `update` / `remove`） |
+| `utils/format.js` | 新增 `ASSET_TYPE` 映射（image/gif/video/audio/json 的 label/icon/颜色）、`assetTypeOf()`、`mediaUrlOf()`、`absoluteUrl()`；`isAutoApproved()` 收敛为只认 scratch |
+| `components/AssetUploader.vue`（新） | 拖拽区 + 扩展名白名单校验 + 元数据表单（名称 / 归入系列 / 新建系列 / 是否公开）；`start()` 走 `initUpload` → 逐片 `uploadApi.putPart`（单片重试 3 次）→ `completeUpload`，`defineExpose({start, reset})` 供父组件调用 |
+| `views/Assets.vue`（新） | 公开素材库 `/materials`：类型 radio 筛选、关键词搜索、网格缩略（图片/GIF/视频取首帧）、预览弹窗（img/video/audio/JSON 美化输出）、一键复制链接（`navigator.clipboard`，失败回退 `execCommand`），并给出 `<img src="...">` 式用法片段 |
+| `views/MeAssets.vue`（新） | 我的素材 `/me/materials`：系列标签条（全部 / 未归系列 / 各系列 / 新建系列）、类型筛选、每个素材卡片带公开性 `el-switch`、下拉菜单（预览 / 归入系列 / 重命名 / 新窗口打开 / 删除）、上传与系列增改删弹窗 |
+| `views/MeProjects.vue` | 顶部加「新建系列 / 系列管理 / 新建投稿」，状态筛选上方加系列标签条，卡片显示 `series-tag`；系列管理弹窗支持逐行切换公开性、改名、删除 |
+| `views/Upload.vue` | 表单新增「项目系列」下拉（可空）+「或新建系列」输入；`saveDraft` 按填写情况提交 `series_id` 或 `new_series_name` |
+| `views/ProjectDetail.vue` | 元信息下方新增系列行，带同系列项目下拉，可直接跳转兄弟作品 |
+| `router/index.js` | 新增 `materials`（SiteLayout）与 `me/materials`（ConsoleLayout）两条路由 |
+| `layouts/ConsoleLayout.vue` | 用户菜单「创作」组新增「我的素材」 |
+| `components/ChunkUploader.vue` | 提示文案补一句「结构文件请到『我的素材』上传」 |
+| `utils/platform.js` | `APP_BUILD` → `v2.0.6` |
+
+> **路由命名踩坑**：最初把公开素材库放在 `/assets`，线上返回 301 —— 因为 SPA 构建产物本身就放在 `/assets/` 目录下，两者冲突。全站改为 `/materials` 与 `/me/materials` 后正常。
+
+### 七、发布与验证
+
+- 后端 `mvn clean package` + Flyway 应用到 **v4**（V3 是并行的 bug_feedback 迁移，两者都成功），`coc-backend` 重启后生效。
+- 前端重建产物 `index-Cb1rm9_k.js`，nginx `root` 直指 `frontend/dist`，公网 `https://collectionofcreations.uk/?_=时间戳` 取到的已是新 index。
+- App：`versionCode 16` / `versionName 2.0.6`，签名 `CN=Collection of Creations`，包体 3,864,440 字节，sha256 `fd71292cd183755ef83f6b78243527cb503f99a97d1335b744c4374b7060d41e`，已放 `/downloads/coc-app-2.0.6.apk` 与 `coc-app-latest.apk`，`version.json` / `version.txt` 同步。
+- **接口级验证**（用真实 JWT 跑通全链路）：建系列 → 素材 `init` → 分片 `part` → `complete` → `GET /media/3/测试图-1x1.png` 返回 200 / `image/png` / 70 字节 / 字节一致 / `max-age=2592000` → 素材出现在公开列表 → `mine` 每行都带 `url` → 改公开性为私密成功 → 匿名访问私密素材 404 → 删除素材与系列 200。
+- **项目系列验证**：`POST /projects` 带 `new_series_name` → 详情返回 `series_id` / `series_name` / 兄弟项目 1 个；`listMine` 返回系列字段；`POST /projects` 带 `project_type: 'structure'` 返回 **400** 与下线提示。
+- **浏览器端 E2E 已补跑（Playwright + Chromium headless）**，脚本 `E:/Server Data/tmp/coc-verify/ui-assets-e2e.cjs`，造 3 个真实素材（360×220 PNG / JSON / 0.2s WAV）+ 1 个素材系列，跑完自清。结果：
+  - 「我的素材」渲染 4 张卡（含系列标签条 `E2E素材系列-xxxxx 3 ●`）、缩略图 `naturalWidth > 0`；
+  - 点「复制链接」→ 真实剪贴板读到 `http://<host>/media/14/e2e-测试图.png`，toast 同步显示「直链已复制：…」，回抓 200 / `image/png` / 61,407 B / 字节一致 / `max-age=2592000` / `nosniff`；
+  - 预览：图片 `naturalWidth > 0`；JSON 弹窗渲染出格式化文本；音频 `readyState=4`、`duration=0.2`（真的解码了，不是空壳）；
+  - 公开性：关闭开关后接口 `is_public=0`、素材库（匿名上下文）该卡消失、匿名 `GET /assets/{id}` → 404，**而直链仍 200**（符合 13.2 的设计）；重新打开 → 卡片回归；
+  - 全程 `requestfailed` 计数 0。
+- ⚠️ **无头浏览器验证的两个拦路坑（下次直接用这招）**：
+  1. 访问 `http://127.0.0.1:8084` 时，前端 `IS_NATIVE_SHELL` 判定会把 hostname `127.0.0.1` 当成 Capacitor 壳，于是 API 走 `https://collectionofcreations.uk/api/v1` 绝对地址 → 跨源被 CORS 拦死，页面只剩「哎呀，卡住了」。**改用 `http://127.0.0.2:8084`**：仍是回环（secure context，`navigator.clipboard` 可用、不走系统代理），但 hostname 不等于 `127.0.0.1`，前端就当普通网页处理。自定义域名（如 `coc.test`）反而会被本机 `http_proxy=127.0.0.1:64070` 劫持返回 502。
+  2. 宿主机（nexus-desktop）会抢走 `msedge.exe` 并静默退出，所以不再用系统 Edge，改用 `npx playwright install chromium` 装的独立 Chromium（`ms-playwright/chromium_headless_shell-1148`）。
+
+---
+
+## 2026-11-19 · 后台审核源码查看/编辑 + 全站趋势折线
+
+### 改动目的
+
+1. 审核队列此前只能看标题、状态与存储路径，管理员无法在后台直接核对或小幅修正项目代码。
+2. 平台统计模块只有 KPI 与原始 JSON，缺少类似用户数据看板的浏览量 / 评论量趋势折线。
+
+### 具体改动
+
+| 文件 | 改动说明 |
+| --- | --- |
+| `backend/.../mapper/ViewMapper.java` | 新增 `dailyViewsTotal` / `hourlyViewsTotal` / `dailyCommentsTotal` / `hourlyCommentsTotal`：去掉 `project_id` 过滤，做全平台按天 / 按小时聚合 |
+| `backend/.../mapper/ProjectMapper.java` | 新增 `updateFileMeta`：在线编辑后回写 `file_size` 与 `sha256` |
+| `backend/.../service/AdminService.java` | 新增 `projectSourceFiles`（列出最新版本 `source/` 目录文件，文本文件附带内容，标注是否可编辑）、`saveSourceFile`（仅限文本后缀 / 2MB 内、防目录穿越，写 `edit_source` 审计并回写元数据）、`platformTrend`（range=2 走小时表 48 点，7/15/30 走天表） |
+| `backend/.../controller/AdminController.java` | 新增 `GET/PUT /admin/projects/{id}/source-files`、`GET /admin/stats/platform/trend?range=` |
+| `frontend/src/api/index.js` | `adminApi` 新增 `sourceFiles` / `saveSource` / `platformTrend` |
+| `frontend/src/views/admin/AdminReview.vue` | 操作列新增「查看/编辑代码」按钮；源码弹窗含文件选择、二进制只读标记、可编辑文本域、保存回写与脏状态拦截 |
+| `frontend/src/views/admin/AdminStats.vue` | 新增 2 / 7 / 15 / 30 天浏览量 + 评论量 echarts 折线，复用用户看板的主题配色与响应式 resize 逻辑 |
+
+### 备注
+
+- 源码改动只写入服务器 `source/` 目录；已有的 `build/` 打包产物不会自动重建，沙箱在无 build 时回退到 source 运行。
+- 可在线编辑后缀：html/htm/js/mjs/cjs/css/json/svg/txt/md/xml/map；图片、压缩包、sb3、wasm 等二进制只读。
+- 按约定本次未执行前端重建、后端重启与 APK 打包，留待统一版本验证。
+
+---
+
+## 2026-11-19 · 前端加载/网络失败提示文案口语化
+
+### 改动目的
+
+原来加载失败、断网、超时、服务异常时直接显示「无法连接后端服务（127.0.0.1:8090 可能尚未启动）」这类面向开发的提示，普通用户看不懂。统一改成轻松口语化的文案，网页端与 App 端共用同一套（同一个前端产物）。
+
+### 具体改动
+
+| 文件 | 行号 | 改动说明 |
+| --- | --- | --- |
+| `frontend/src/api/http.js` | L88、L108、L117-L122 | 业务错误兜底、登录过期、403/404/超时/断网/其它失败的全局提示改为口语化（如「啊哦，网络离家出走啦～」） |
+| `frontend/src/components/AppState.vue` | L18、L54-L63 | 列表/详情错误态标题改为「哎呀，卡住了」；断网、5xx、401、其它错误分别给出友好文案 |
+| `frontend/src/views/DevApply.vue` | L131 | 提交失败兜底去掉「后端 8090 可能未启动」 |
+| `frontend/src/views/Forgot.vue` | L84 | 找回申请失败兜底改为口语化，保留管理员 QQ |
+| `frontend/src/components/ChunkUploader.vue` | L203 | 上传初始化失败改为「上传没能开始，网络可能开小差了」 |
+| `frontend/src/views/Home.vue` | L114 | 空标签提示去掉「后端未启动」表述 |
+| `frontend/src/views/Messages.vue` | L173-L178、L183 | 实时通道断开/异常/降级轮询状态文案口语化，去掉「后端 WS 可能未启动」 |
+| `frontend/src/views/admin/AdminStorage.vue` | L17 | 空状态去掉「后端接口可能尚未实现」 |
+| `frontend/src/views/admin/AdminUsers.vue` | L12 | 空状态去掉「后端接口可能尚未实现」 |
+
+### 备注
+
+- 只改用户可见文案，不动任何请求、重试、降级逻辑；业务错误仍优先显示服务端返回的具体原因。
+- 本次同属 **COC 五期测试** 过程中的小改动，未执行构建与打包。
+
+---
+
 ## 2026-11-19 · 修复：官网所有资源地址被写死成 `127.0.0.1:8090`（下载 2.0.5 报 404 的根因）
 
 > 线上事故修复，随 2.0.5 网页产物一起发布（APK 不受影响，无需重打包）。
@@ -246,6 +438,36 @@ grep -rl "127.0.0.1:8090" frontend/dist-user/assets/*.js
 - 只对 `project_type === 'html'` 且已发布的作品启用视图切换；scratch 与不可运行状态不受影响。
 - 桌面端行为完全不变（`isNarrow` 为 false 时 `canSwitchView` / `desktopSim` 均为 false）。
 - 详细的状态与版本记录见 `docs/PROJECT-STATUS-20261115.md` 第十一章。
+
+---
+
+## 2026-11-19 · 设置页新增 Bug 反馈渠道 + 管理后台受理
+
+### 改动目的
+
+用户此前没有统一的 Bug 反馈入口。本次在「设置」页新增反馈表单（登录用户可提交），新增 `bug_feedback` 表（用户 ID + 反馈内容 + 状态码），管理后台新增「Bug 反馈」页，可按状态筛选未受理 / 已处理，并将单条反馈标记为已处理。
+
+### 具体改动
+
+| 文件 | 行号 | 改动说明 |
+| --- | --- | --- |
+| `backend/src/main/resources/db/migration/V3__bug_feedback.sql` | L1-L14 | **新增迁移**：`bug_feedback` 表（`bug_id` / `user_id` / `content VARCHAR(1000)` / `status TINYINT 0未受理 1已处理` / `created_at`），含状态索引、用户索引与外键 |
+| `backend/.../mapper/BugFeedbackMapper.java` | L1-L39 | **新增**：插入反馈、按 ID 查询、管理端分页列表（联表取昵称/QQ）、按状态计数、标记已处理 |
+| `backend/.../service/BugFeedbackService.java` | L1-L80 | **新增**：提交校验（必填、≤1000 字）、管理端列表（`status` 可选）、标记已处理（不存在/已处理时返回业务错误） |
+| `backend/.../controller/InteractionController.java` | L27-L35、L85-L90 | 注入服务并新增 `POST /api/v1/bug-feedback` |
+| `backend/.../controller/AdminController.java` | L15、L28-L34、L158-L170 | 新增 `GET /api/v1/admin/bug-feedback`（可按 `status` 过滤）与 `POST /api/v1/admin/bug-feedback/{bug_id}/handle` |
+| `backend/.../auth/AuthInterceptor.java` | L44 | 将 `POST:/api/v1/bug-feedback` 加入必须登录白名单 |
+| `frontend/src/api/index.js` | L45-L46、L103-L104 | 新增 `interactApi.bugFeedback`、`adminApi.bugFeedbacks` / `handleBugFeedback` |
+| `frontend/src/views/Settings.vue` | L63-L85、L187-L206、L313 | 新增「问题反馈」卡片：多行输入（1000 字上限、字数统计、`data-field` 兜底）+ 提交按钮 |
+| `frontend/src/views/admin/AdminBugFeedback.vue` | L1-L108 | **新增管理页**：未受理 / 已处理 / 全部筛选、用户信息、反馈内容、状态、时间、标记已处理 |
+| `frontend/src/router/index.js` | L52 | 新增 `/admin/bug-feedback` 管理路由 |
+| `frontend/src/layouts/ConsoleLayout.vue` | L87 | 管理后台「用户」分组新增「Bug 反馈」菜单 |
+
+### 备注
+
+- 后端已通过 `mvn -DskipTests compile` 编译校验；数据库迁移由 Flyway 在后端下次启动时自动执行，本次未重启生产服务、未部署。
+- 反馈只记录用户 ID、内容与状态，不采集设备信息；管理端列表联表显示提交人昵称与 QQ。
+- 本次同属 **COC 五期测试** 过程中的小改动，仍未执行前端构建与 APK 打包。
 
 ---
 

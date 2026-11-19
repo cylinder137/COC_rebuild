@@ -137,6 +137,26 @@
                   · 发布于 {{ fmtTime(detail.published_at || detail.created_at) }}
                   · {{ compactNum(detail.view_count_total) }} 次浏览
                 </div>
+                <!-- 项目系列：同一系列的作品成体系展示（五期） -->
+                <div v-if="detail.series_name" class="series-row">
+                  <el-icon class="dim"><Collection /></el-icon>
+                  <span class="sm">系列：<strong>{{ detail.series_name }}</strong></span>
+                  <el-select
+                    v-if="(detail.series_projects || []).length > 1"
+                    :model-value="detail.project_id"
+                    size="small"
+                    class="series-pick"
+                    @change="goSeriesProject"
+                  >
+                    <el-option
+                      v-for="s in detail.series_projects"
+                      :key="s.project_id"
+                      :label="(s.is_current ? '· ' : '') + s.title"
+                      :value="s.project_id"
+                    />
+                  </el-select>
+                </div>
+
                 <!-- 点赞/收藏/评论这类高频操作常驻，详情默认收起 -->
                 <div class="actions">
                   <button class="act" :class="{ on: liked }" @click="toggleLike" aria-pressed="liked">
@@ -627,6 +647,12 @@ function setViewMode(mode) {
 }
 function toggleViewMode() { setViewMode(viewMode.value === 'desktop' ? 'mobile' : 'desktop') }
 
+/** 同系列作品之间直接跳转（同页换 id，不整页刷新） */
+function goSeriesProject(pid) {
+  if (!pid || pid === detail.value?.project_id) return
+  router.push({ name: 'project-detail', params: { id: pid } })
+}
+
 const fallbackIcon = computed(() => {  const s = detail.value?.status
   if (s === 3) return 'CircleCloseFilled'
   if (s === 1) return 'Clock'
@@ -639,14 +665,14 @@ const fallbackTitle = computed(() => {
   if (d.status === 1) return '审核中，暂不可公开预览'
   if (d.status === 3) return '该作品已被下架'
   if (d.status === 4) return '该作品已被拒绝，作者可修改后重新提交'
-  if (d.project_type === 'structure') return '结构文件预览'
+  if (d.project_type === 'structure') return '结构文件预览（该板块已下线）'
   return '此类型暂不支持在线运行'
 })
 const fallbackDesc = computed(() => {
   const d = detail.value
   if (d?.status === 1) return '审核通常在 1 个工作日内完成，可先去我的作品查看状态。'
   if (d?.status === 3) return d.down_reason ? `原因：${d.down_reason}` : '如需申诉请联系管理员（QQ 3254328344）。'
-  if (d?.project_type === 'structure') return '一期只提供元数据卡，3D 渲染能力验证中。'
+  if (d?.project_type === 'structure') return 'MC 结构板块已在五期下线，新作品请改用「素材」上传结构文件并引用直链。'
   return '可下载源码后本地运行（需要登录）。'
 })
 const statusBanner = computed(() => {
@@ -1154,6 +1180,12 @@ onUnmounted(() => {
 .rail-btn.is-primary:hover { background: var(--c-primary-hover); }
 
 /* 详情里的「运行视图」切换 */
+.series-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; padding: 8px 10px; border-radius: var(--r-md);
+  background: var(--c-bg-sunken);
+}
+.series-pick { max-width: 220px; }
 .view-mode-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: 14px 0 4px; padding: 10px 12px;

@@ -128,7 +128,7 @@ async function submit() {
   const r = await safe(authApi.devApply(payload))
   loading.value = false
   if (!r.ok) {
-    ElMessage.error(r.error?.response?.data?.message || '提交失败，请稍后重试（后端 8090 可能未启动）')
+    ElMessage.error(r.error?.response?.data?.message || '哎呀，申请没提交成功，稍后再试试～')
     return
   }
   done.value = true

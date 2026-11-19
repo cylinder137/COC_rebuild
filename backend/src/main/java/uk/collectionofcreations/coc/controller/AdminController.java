@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import uk.collectionofcreations.coc.common.ApiResponse;
 import uk.collectionofcreations.coc.common.Params;
 import uk.collectionofcreations.coc.service.AdminService;
+import uk.collectionofcreations.coc.service.BugFeedbackService;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,9 +27,11 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final BugFeedbackService bugFeedbackService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, BugFeedbackService bugFeedbackService) {
         this.adminService = adminService;
+        this.bugFeedbackService = bugFeedbackService;
     }
 
     // ---- 项目 ----
@@ -99,6 +103,22 @@ public class AdminController {
         return ApiResponse.ok(adminService.projectStorage(projectId, FileController.clientIp(request)));
     }
 
+    /** 项目源码文件清单（文本文件附带内容，供审核页查看 / 在线编辑） */
+    @GetMapping("/projects/{project_id}/source-files")
+    public ApiResponse<Map<String, Object>> sourceFiles(@PathVariable("project_id") long projectId,
+                                                        HttpServletRequest request) {
+        return ApiResponse.ok(adminService.projectSourceFiles(projectId, FileController.clientIp(request)));
+    }
+
+    /** 在线保存源码文本文件的修改（仅管理员，写审计） */
+    @PutMapping("/projects/{project_id}/source-files")
+    public ApiResponse<Map<String, Object>> saveSource(@PathVariable("project_id") long projectId,
+                                                       @RequestBody Map<String, Object> body,
+                                                       HttpServletRequest request) {
+        return ApiResponse.ok(adminService.saveSourceFile(projectId,
+                Params.str(body, "rel"), Params.str(body, "content"), FileController.clientIp(request)));
+    }
+
     // ---- 评论 ----
 
     @GetMapping("/comments")
@@ -152,6 +172,20 @@ public class AdminController {
                 Params.str(body, "result"), FileController.clientIp(request)));
     }
 
+    // ---- Bug 反馈 ----
+
+    /** 列表：status=0 未受理 / 1 已处理，不传为全部 */
+    @GetMapping("/bug-feedback")
+    public ApiResponse<Map<String, Object>> bugFeedbacks(@RequestParam Map<String, Object> query) {
+        return ApiResponse.ok(bugFeedbackService.adminList(query));
+    }
+
+    /** 标记已处理 */
+    @PostMapping("/bug-feedback/{bug_id}/handle")
+    public ApiResponse<Map<String, Object>> handleBugFeedback(@PathVariable("bug_id") long bugId) {
+        return ApiResponse.ok(bugFeedbackService.handle(bugId));
+    }
+
     // ---- 找回密码 / 注销 ----
 
     @GetMapping("/password-resets")
@@ -191,6 +225,12 @@ public class AdminController {
     @GetMapping("/stats/platform")
     public ApiResponse<Map<String, Object>> stats() {
         return ApiResponse.ok(adminService.platformStats());
+    }
+
+    /** 全平台浏览 / 评论趋势折线：range=2 / 7 / 15 / 30 */
+    @GetMapping("/stats/platform/trend")
+    public ApiResponse<List<Map<String, Object>>> platformTrend(@RequestParam(value = "range", required = false) Integer range) {
+        return ApiResponse.ok(adminService.platformTrend(range == null ? 7 : range));
     }
 
     @GetMapping("/logs")

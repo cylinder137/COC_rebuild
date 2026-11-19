@@ -61,6 +61,7 @@ import { fileUrl, fmtSize } from '@/utils/format'
  * size 为安装包字节数，仅用于展示。
  */
 const RELEASES = [
+  { version: '2.0.6', file: 'coc-app-2.0.6.apk', date: '2026-11-19', size: 3864440, note: '素材库替代 MC 结构板块；项目/素材系列；素材直链一键复制' },
   { version: '2.0.5', file: 'coc-app-2.0.5.apk', date: '2026-11-19', size: 3864431, note: '手机端全屏虚拟按键：双摇杆 + 自定义按键' },
   { version: '2.0.4', file: 'coc-app-2.0.4.apk', date: '2026-11-19', size: 3855581, note: '手机端默认手机版视图，可切电脑版；全屏自动横屏' },
   { version: '2.0.3', file: 'coc-app-2.0.3.apk', date: '2026-11-15', size: 3853343, note: '修复 App 端输入框失效导致的「草稿建不出来」' },

@@ -5,7 +5,37 @@
         <h2 class="section-title" style="margin:0">我的作品</h2>
         <div class="sm dim">状态徽标一目了然：待审 / 已发布 / 已下架 / 已拒绝</div>
       </div>
-      <router-link to="/upload"><el-button type="primary"><el-icon><Upload /></el-icon>&nbsp;新建投稿</el-button></router-link>
+      <div class="row gap8">
+        <el-button @click="openSeriesDialog()"><el-icon><Plus /></el-icon>&nbsp;新建系列</el-button>
+        <el-button v-if="series.length" text @click="manageVisible = true">系列管理</el-button>
+        <router-link to="/upload"><el-button type="primary"><el-icon><Upload /></el-icon>&nbsp;新建投稿</el-button></router-link>
+      </div>
+    </div>
+
+    <!-- 项目系列筛选：同一系列的作品成体系管理（如「物理演示程序系列」） -->
+    <div v-if="series.length" class="row gap8 wrap center mb16">
+      <el-tag
+        :type="seriesFilter === '' ? 'primary' : 'info'"
+        :effect="seriesFilter === '' ? 'dark' : 'plain'"
+        round
+        @click="pickSeries('')"
+      >全部系列</el-tag>
+      <el-tag
+        :type="seriesFilter === 'none' ? 'primary' : 'info'"
+        :effect="seriesFilter === 'none' ? 'dark' : 'plain'"
+        round
+        @click="pickSeries('none')"
+      >未归系列</el-tag>
+      <el-tag
+        v-for="s in series"
+        :key="s.series_id"
+        :type="seriesFilter === s.series_id ? 'primary' : 'info'"
+        :effect="seriesFilter === s.series_id ? 'dark' : 'plain'"
+        round
+        @click="pickSeries(s.series_id)"
+      >
+        {{ s.name }} {{ s.item_count }}<span v-if="s.is_public" class="pub-dot">●</span>
+      </el-tag>
     </div>
 
     <el-radio-group v-model="status" class="mb16" @change="load">
@@ -34,6 +64,7 @@
     <div v-if="list.length" class="grid">
       <div v-for="p in list" :key="p.project_id || p.id" class="card">
         <ProjectCard :p="p" :show-status="true" :show-reason="true" />
+        <div v-if="p.series_name" class="xs dim series-tag">系列：{{ p.series_name }}</div>
         <div class="ops">
           <router-link :to="`/projects/${p.project_id || p.id}`">
             <el-button size="small" text>查看</el-button>
@@ -62,6 +93,47 @@
       共 {{ total }} 件作品
     </div>
 
+    <!-- 新建 / 编辑项目系列 -->
+    <el-dialog v-model="seriesDlg" :title="seriesForm.series_id ? '编辑项目系列' : '新建项目系列'" width="min(460px, 92vw)">
+      <el-form label-width="72px">
+        <el-form-item label="名称">
+          <el-input v-model="seriesForm.name" maxlength="80" placeholder="例如：物理演示程序系列" data-field="p_series_name" />
+        </el-form-item>
+        <el-form-item label="简介">
+          <el-input v-model="seriesForm.intro" maxlength="255" type="textarea" :rows="2" placeholder="这个系列收录什么" />
+        </el-form-item>
+        <el-form-item label="公开">
+          <el-switch v-model="seriesForm.is_public" />
+          <span class="xs dim" style="margin-left:8px">公开后别人能在你的主页看到这个系列</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="seriesDlg = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveSeries">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 系列管理 -->
+    <el-dialog v-model="manageVisible" title="项目系列" width="min(560px, 94vw)">
+      <div v-for="s in series" :key="s.series_id" class="mng-row">
+        <div class="grow">
+          <div class="sm">{{ s.name }} <span class="xs dim">（{{ s.item_count }} 个作品{{ s.is_public ? ' · 公开' : '' }}）</span></div>
+          <div v-if="s.intro" class="xs dim">{{ s.intro }}</div>
+        </div>
+        <el-switch
+          :model-value="!!s.is_public"
+          size="small"
+          inline-prompt
+          active-text="公开"
+          inactive-text="私有"
+          @change="(v) => toggleSeriesPublic(s, v)"
+        />
+        <el-button size="small" text @click="openSeriesDialog(s)">改名</el-button>
+        <el-button size="small" text type="danger" @click="removeSeries(s)">删除</el-button>
+      </div>
+      <div v-if="!series.length" class="xs dim" style="padding:12px 0">还没有项目系列</div>
+    </el-dialog>
+
     <!-- 更换封面（作者本人） -->
     <el-dialog v-model="coverVisible" title="设置项目封面" width="520px">
       <p class="xs dim" style="margin-top:0">
@@ -78,13 +150,13 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import ProjectCard from '@/components/ProjectCard.vue'
 import CoverUploader from '@/components/CoverUploader.vue'
-import { uploadApi, safe } from '@/api'
+import { seriesApi, uploadApi, safe } from '@/api'
 import { pickList, pickTotal } from '@/utils/format'
 
 const router = useRouter()
@@ -96,6 +168,68 @@ const status = ref('')
 const coverVisible = ref(false)
 const coverTarget = ref(null)
 const submittingId = ref(null)
+/* ---- 项目系列 ---- */
+const series = ref([])
+const seriesFilter = ref('')
+const seriesDlg = ref(false)
+const manageVisible = ref(false)
+const saving = ref(false)
+const seriesForm = reactive({ series_id: null, name: '', intro: '', is_public: false })
+
+async function loadSeries() {
+  const r = await safe(seriesApi.mine('project'))
+  series.value = r.ok && Array.isArray(r.data) ? r.data : []
+}
+
+function pickSeries(v) {
+  seriesFilter.value = v
+  load()
+}
+
+function openSeriesDialog(s) {
+  seriesForm.series_id = s?.series_id || null
+  seriesForm.name = s?.name || ''
+  seriesForm.intro = s?.intro || ''
+  seriesForm.is_public = !!s?.is_public
+  seriesDlg.value = true
+}
+
+async function saveSeries() {
+  const name = (seriesForm.name || '').trim()
+  if (!name) { ElMessage.warning('请填写系列名称'); return }
+  saving.value = true
+  const payload = { kind: 'project', name, intro: seriesForm.intro || '', is_public: seriesForm.is_public ? 1 : 0 }
+  const r = seriesForm.series_id
+    ? await safe(seriesApi.update(seriesForm.series_id, payload))
+    : await safe(seriesApi.create(payload))
+  saving.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '保存失败'); return }
+  seriesDlg.value = false
+  ElMessage.success('已保存')
+  loadSeries()
+}
+
+async function toggleSeriesPublic(s, v) {
+  const r = await safe(seriesApi.update(s.series_id, { kind: 'project', is_public: v ? 1 : 0 }))
+  if (!r.ok) { ElMessage.error('修改失败'); return }
+  s.is_public = v ? 1 : 0
+}
+
+async function removeSeries(s) {
+  try {
+    await ElMessageBox.confirm(
+      `删除系列《${s.name}》？系列里的作品不会被删除，只会变成「未归系列」。`,
+      '删除项目系列',
+      { type: 'warning' }
+    )
+  } catch (e) { return }
+  const r = await safe(seriesApi.remove(s.series_id, 'project'))
+  if (!r.ok) { ElMessage.error('删除失败'); return }
+  if (seriesFilter.value === s.series_id) seriesFilter.value = ''
+  ElMessage.success('系列已删除')
+  loadSeries()
+  load()
+}
 
 /** 打开某作品的封面设置弹窗 */
 function openCover(p) {
@@ -117,6 +251,9 @@ async function load() {
   error.value = null
   const params = { page: 1, size: 50 }
   if (status.value !== '') params.status = status.value
+  // 「未归系列」= series_id 为空：后端 listMine 支持 no_series
+  if (seriesFilter.value === 'none') params.no_series = 1
+  else if (seriesFilter.value !== '') params.series_id = seriesFilter.value
   const r = await safe(uploadApi.myProjects(params))
   loading.value = false
   if (!r.ok) { error.value = r.error || true; return }
@@ -146,7 +283,10 @@ async function submitDraft(p) {
   load()
 }
 
-onMounted(load)
+onMounted(async () => {
+  await loadSeries()
+  await load()
+})
 </script>
 
 <style scoped>
@@ -154,4 +294,8 @@ onMounted(load)
 .card { padding: 12px; }
 .ops { display: flex; gap: 4px; margin-top: 10px; justify-content: flex-end; }
 .mb16 { margin-bottom: 16px; }
+.series-tag { margin-top: 4px; }
+.pub-dot { font-size: 8px; color: var(--c-success); margin-left: 2px; }
+.mng-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--c-border); }
+.mng-row:last-child { border-bottom: none; }
 </style>

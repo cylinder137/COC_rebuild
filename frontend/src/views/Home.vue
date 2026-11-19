@@ -24,10 +24,10 @@
       <div class="type-entry">
         <div
           v-for="t in typeEntries"
-          :key="t.value"
+          :key="t.value || t.to"
           class="te-card hoverable"
-          :class="{ active: filters.project_type === t.value }"
-          @click="pickType(t.value)"
+          :class="{ active: !t.to && filters.project_type === t.value }"
+          @click="t.to ? router.push(t.to) : pickType(t.value)"
         >
           <span class="te-bar" :style="{ background: t.color }" />
           <div class="te-ico" :style="{ background: t.color + '1f', color: t.color }">
@@ -111,7 +111,7 @@
                 @click="quickSearch(t.name)"
               >{{ t.name }}</el-tag>
             </div>
-            <div v-else class="xs dim">暂无标签（后端未启动或数据为空）</div>
+            <div v-else class="xs dim">标签们还在路上，晚点再来看看～</div>
           </div>
 
           <div class="card">
@@ -180,11 +180,12 @@ const filters = reactive({
   sort: route.query.sort || 'latest'
 })
 
+/* 五期：MC 结构板块下线，入口换成素材库（素材直链可被作品引用） */
 const typeEntries = [
   { value: 'scratch', label: 'Scratch', hint: '积木编程', color: TYPE_COLOR.scratch, icon: 'Cpu' },
   { value: 'html', label: 'HTML', hint: '网页小游戏', color: TYPE_COLOR.html, icon: 'Monitor' },
-  { value: 'structure', label: '结构', hint: 'MC 结构文件', color: TYPE_COLOR.structure, icon: 'Box' },
-  { value: '', label: '全部作品', hint: '所有已发布', color: 'var(--c-accent)', icon: 'Grid' }
+  { value: '', label: '全部作品', hint: '所有已发布', color: 'var(--c-accent)', icon: 'Grid' },
+  { to: '/materials', label: '素材库', hint: '图片 / 视频 / 音频', color: '#22c55e', icon: 'Picture' }
 ]
 
 async function fetchPage(reset = false) {

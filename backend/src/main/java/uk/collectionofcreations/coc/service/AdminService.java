@@ -18,13 +18,19 @@ import uk.collectionofcreations.coc.mapper.ViewMapper;
 import uk.collectionofcreations.coc.storage.StorageService;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 管理端业务：审核、下架/恢复/删除、评论管理、开发者申请、举报处理、找回密码、注销、平台统计、存储路径。
@@ -34,6 +40,12 @@ public class AdminService {
 
     private static final String TEMP_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** 可在线查看 / 编辑的文本类后缀；二进制（图片 / 压缩包 / sb3 / wasm 等）只读或不可编辑 */
+    private static final Set<String> TEXT_EXT = Set.of(
+            "html", "htm", "js", "mjs", "cjs", "css", "json", "svg", "txt", "md", "xml", "map", "jsmap");
+    private static final long MAX_EDIT_BYTES = 2L * 1024 * 1024;
+    private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00");
 
     private final ProjectMapper projectMapper;
     private final CommentMapper commentMapper;
@@ -591,6 +603,203 @@ public class AdminService {
         data.put("total_size_bytes", totalSize);
         audit(adminId, "view_storage", "project", projectId, "查看服务器存储路径", ip);
         return data;
+    }
+
+    // ---------------- 源码查看 / 在线编辑（管理员） ----------------
+
+    /** 列出项目最新版本 source 目录下的文件，文本文件附带内容（供审核页查看 / 修改代码） */
+    public Map<String, Object> projectSourceFiles(long projectId, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        Map<String, Object> project = requireProject(projectId);
+        Map<String, Object> version = projectMapper.findLatestVersion(projectId);
+
+        List<Map<String, Object>> files = new ArrayList<>();
+        Path sourceDir = null;
+        if (version != null) {
+            int vno = ((Number) version.get("version_no")).intValue();
+            sourceDir = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId))
+                    .resolve("v" + vno).resolve("source");
+        }
+
+        // DB 记录按「相对 sourceDir 的路径 / 文件名」索引，用于回填 file_id、sha256
+        Map<String, Map<String, Object>> dbByRel = new LinkedHashMap<>();
+        for (Map<String, Object> f : projectMapper.listFilesByProject(projectId)) {
+            Path p = storageService.resolveStored(String.valueOf(f.get("storage_path")));
+            if (p == null) continue;
+            String rel = sourceDir != null && p.normalize().startsWith(sourceDir.normalize())
+                    ? sourceDir.relativize(p.normalize()).toString().replace('\\', '/')
+                    : p.getFileName().toString();
+            dbByRel.put(rel, f);
+        }
+
+        if (sourceDir != null && Files.isDirectory(sourceDir)) {
+            List<Path> paths = new ArrayList<>();
+            try (var walk = Files.walk(sourceDir)) {
+                walk.filter(Files::isRegularFile).forEach(paths::add);
+            } catch (IOException e) {
+                throw BizException.badRequest("读取源码目录失败: " + e.getMessage());
+            }
+            paths.sort((a, b) -> a.toString().compareTo(b.toString()));
+            for (Path p : paths) {
+                String rel = sourceDir.relativize(p.normalize()).toString().replace('\\', '/');
+                files.add(sourceFileEntry(rel, p, dbByRel.get(rel)));
+            }
+        } else {
+            // 兜底：source 目录不存在时，直接列 DB 记录指向的文件
+            for (Map.Entry<String, Map<String, Object>> e : dbByRel.entrySet()) {
+                Path p = storageService.resolveStored(String.valueOf(e.getValue().get("storage_path")));
+                if (p != null && Files.exists(p)) {
+                    files.add(sourceFileEntry(e.getKey(), p, e.getValue()));
+                }
+            }
+        }
+
+        audit(adminId, "view_source", "project", projectId, "查看项目源码", ip);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("title", project.get("title"));
+        data.put("source_dir", sourceDir == null ? null : sourceDir.toString());
+        data.put("files", files);
+        return data;
+    }
+
+    private Map<String, Object> sourceFileEntry(String rel, Path p, Map<String, Object> db) {
+        Map<String, Object> x = new LinkedHashMap<>();
+        long size = 0L;
+        try { size = Files.size(p); } catch (IOException ignored) {}
+        String ext = extOf(p.getFileName().toString());
+        boolean text = TEXT_EXT.contains(ext);
+        boolean editable = text && size <= MAX_EDIT_BYTES;
+        x.put("rel", rel);
+        x.put("file_name", p.getFileName().toString());
+        x.put("ext", ext);
+        x.put("size", size);
+        x.put("editable", editable);
+        x.put("file_id", db == null ? null : db.get("project_file_id"));
+        x.put("sha256", db == null ? null : db.get("sha256"));
+        String content = null;
+        if (text && size <= MAX_EDIT_BYTES) {
+            try {
+                byte[] bytes = Files.readAllBytes(p);
+                if (!hasNul(bytes)) content = new String(bytes, StandardCharsets.UTF_8);
+            } catch (IOException ignored) {}
+        }
+        x.put("content", content);
+        return x;
+    }
+
+    /** 在线保存管理员对源码文本文件的修改；写审计并回写 DB 大小 / sha256 */
+    @Transactional
+    public Map<String, Object> saveSourceFile(long projectId, String rel, String content, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        Map<String, Object> project = requireProject(projectId);
+        Map<String, Object> version = projectMapper.findLatestVersion(projectId);
+        if (version == null) throw BizException.badRequest("项目尚无版本文件，无法在线编辑");
+        int vno = ((Number) version.get("version_no")).intValue();
+        Path sourceDir = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId))
+                .resolve("v" + vno).resolve("source");
+        if (rel == null || rel.isBlank() || rel.contains("..") || rel.startsWith("/")) {
+            throw BizException.badRequest("非法路径");
+        }
+        Path target = sourceDir.resolve(rel).normalize();
+        if (!target.startsWith(sourceDir.normalize())) {
+            throw BizException.forbidden("非法路径");
+        }
+        if (!Files.exists(target) || Files.isDirectory(target)) {
+            throw BizException.notFound("文件不存在: " + rel);
+        }
+        String ext = extOf(target.getFileName().toString());
+        if (!TEXT_EXT.contains(ext)) throw BizException.badRequest("该文件类型不可在线编辑");
+        byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_EDIT_BYTES) throw BizException.badRequest("文件超过 2MB，不可在线编辑");
+        try {
+            Files.write(target, bytes,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        } catch (IOException e) {
+            throw BizException.badRequest("写入失败: " + e.getMessage());
+        }
+
+        // 回写 DB 记录（若该文件在 project_file 中有登记）
+        Long fileId = null;
+        for (Map<String, Object> f : projectMapper.listFilesByProject(projectId)) {
+            Path p = storageService.resolveStored(String.valueOf(f.get("storage_path")));
+            if (p != null && p.normalize().equals(target)) {
+                Map<String, Object> upd = new LinkedHashMap<>();
+                upd.put("project_file_id", f.get("project_file_id"));
+                upd.put("file_size", (long) bytes.length);
+                try { upd.put("sha256", storageService.sha256(target)); } catch (IOException e) { upd.put("sha256", null); }
+                projectMapper.updateFileMeta(upd);
+                fileId = ((Number) f.get("project_file_id")).longValue();
+                break;
+            }
+        }
+        audit(adminId, "edit_source", "project_file", fileId, "在线编辑源码: " + rel, ip);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("rel", rel);
+        data.put("size", (long) bytes.length);
+        data.put("saved", true);
+        return data;
+    }
+
+    private String extOf(String name) {
+        int idx = name == null ? -1 : name.lastIndexOf('.');
+        if (idx < 0 || idx == name.length() - 1) return "";
+        return name.substring(idx + 1).toLowerCase();
+    }
+
+    private boolean hasNul(byte[] b) {
+        for (byte x : b) if (x == 0) return true;
+        return false;
+    }
+
+    // ---------------- 平台趋势统计 ----------------
+
+    /** 全平台浏览 / 评论趋势折线：range=2 走小时表（48 点），7/15/30 走天表 */
+    public List<Map<String, Object>> platformTrend(int range) {
+        AuthContext.requireAdmin();
+        List<Map<String, Object>> points = new ArrayList<>();
+        if (range == 2) {
+            Map<String, Object> q = new LinkedHashMap<>();
+            q.put("hours", 47);
+            Map<String, Long> views = toCountMap(viewMapper.hourlyViewsTotal(q));
+            Map<String, Long> comments = toCountMap(viewMapper.hourlyCommentsTotal(q));
+            LocalDateTime base = LocalDateTime.now().withMinute(0).withSecond(0).withNano(0);
+            for (int i = 47; i >= 0; i--) {
+                LocalDateTime t = base.minusHours(i);
+                points.add(trendPoint(t.format(HOUR_FMT), views, comments));
+            }
+            return points;
+        }
+        int days = (range == 15 || range == 30) ? range : 7;
+        Map<String, Object> q = new LinkedHashMap<>();
+        q.put("days", days - 1);
+        Map<String, Long> views = toCountMap(viewMapper.dailyViewsTotal(q));
+        Map<String, Long> comments = toCountMap(viewMapper.dailyCommentsTotal(q));
+        LocalDate today = LocalDate.now();
+        for (int i = days - 1; i >= 0; i--) {
+            points.add(trendPoint(today.minusDays(i).format(DAY_FMT), views, comments));
+        }
+        return points;
+    }
+
+    private Map<String, Object> trendPoint(String key, Map<String, Long> views, Map<String, Long> comments) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("date", key);
+        p.put("views", views.getOrDefault(key, 0L));
+        p.put("comments", comments.getOrDefault(key, 0L));
+        return p;
+    }
+
+    private Map<String, Long> toCountMap(List<Map<String, Object>> rows) {
+        Map<String, Long> m = new LinkedHashMap<>();
+        for (Map<String, Object> r : rows) {
+            Object k = r.get("stat_key");
+            Object c = r.get("cnt");
+            if (k != null && c != null) m.put(String.valueOf(k), ((Number) c).longValue());
+        }
+        return m;
     }
 
     public List<Map<String, Object>> logs(Map<String, Object> query) {

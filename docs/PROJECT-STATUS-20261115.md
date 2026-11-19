@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-19 11:30（GMT+8）· 发布 v2.0.5（手机端全屏虚拟按键：双摇杆 + 自定义按键），见第十二章
+> 最近更新：2026-11-19 16:25（GMT+8）· 发布 v2.0.6（下线 mcstructure 板块、上线素材库 + 项目/素材系列），见第十三章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -15,14 +15,14 @@
 | 维度 | 现状 |
 | --- | --- |
 | 仓库根 | `E:\Project Files\COC_rebuild` |
-| 分支 | `main`，HEAD `d3caa3e`（2026-11-12），**工作区有 27 个已跟踪文件改动 + `docs/` 未跟踪**（未提交，按用户要求） |
+| 分支 | `main`，HEAD `bc3e2aa`（2026-11-19，2.0.5 已推送 `4c9acb2..bc3e2aa`）；**2.0.6 的改动 + 并行的 bug_feedback 改动均在工作区未提交** |
 | 远程 | `https://github.com/cylinder137/COC_rebuild.git`（已推送，ahead=0） |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router（`createWebHistory`） |
 | 后端 | Java 21 + Spring Boot 3.5 + MyBatis + MySQL 8 + Flyway |
-| 数据库 | `coc_platform`，**27 张表**，Flyway `V1__init.sql` + `V2__password_reset_reject.sql` |
+| 数据库 | `coc_platform`，**31 张表**，Flyway `V1` → `V4`（`V3__bug_feedback`、`V4__assets_and_series` 已应用） |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.5 / versionCode 15**（2026-11-19 11:21 打包） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.6 / versionCode 16**（2026-11-19 16:04 打包） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -45,7 +45,9 @@ E:\Project Files\COC_rebuild
 - 分支：`main`，HEAD `ba2e3dd`（11-15 已推送，`d3caa3e..ba2e3dd`），工作区干净
 - 2.0.3 的改动已入库，拆成 3 个提交：`b254420` 账号注销接口 / `0947806` 手机端输入框修复 / `ba2e3dd` 文档更新
 - 2.0.4 的改动已入库（`ec5e10e` 视图切换/全屏横屏 + `4c9acb2` 零散优化与 devlog），已推送 `ba2e3dd..4c9acb2`
-- ⚠️ 2.0.5 的改动（虚拟按键：`VirtualPad.vue`、`utils/vkeys.js`、`ProjectDetail.vue`、`platform.js` + devlog）**尚未提交**，等实测通过后再入库；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
+- 2.0.5 的改动已入库并推送（`bc3e2aa`：虚拟按键 `VirtualPad.vue` / `utils/vkeys.js` / `format.js` ORIGIN 修复）；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
+- ⚠️ **2.0.6 的改动（素材库 + 系列 + mcstructure 下线）尚未提交**（`V4__assets_and_series.sql`、`Asset*/Series*` 后端、`Assets.vue` / `MeAssets.vue` / `AssetUploader.vue`、`MeProjects`/`Upload`/`ProjectDetail`/`Home`/`BottomTabBar`/`ConsoleLayout`、`devlog.md`、本文件）
+- ⚠️ 同一工作区里还有**另一个并行会话**在改 `bug_feedback` 相关文件（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue`、`AdminController`、`InteractionController`、`ViewMapper`、`AdminService`、`AdminReview`/`AdminStats`/`http.js`/若干文案文件）。**提交前务必按路径挑拣，别把对方未完成的改动一起 commit。**
 - 未提交改动（11-15 22:20 现状，`git status --porcelain` 共 28 行）：
 
   ```
@@ -93,33 +95,37 @@ E:\Project Files\COC_rebuild
 
 ### 2.2 数据库（`coc_platform`，MySQL 8.4.9 / 端口 3306）
 
-- 迁移：Flyway `V1__init.sql`（33,950 B）、`V2__password_reset_reject.sql`（629 B），均已成功应用
-- 27 张表：
+- 迁移：`V1__init.sql`（33,950 B）、`V2__password_reset_reject.sql`、`V3__bug_feedback.sql`、`V4__assets_and_series.sql`，全部 `success=1`（当库 version = **v4**）
+- 31 张表：
 
   ```
-  agreement_version  build_task  category  comment  comment_like  developer_profile
-  flyway_schema_history  follow  im_message  im_session  im_session_member
-  notification  operation_log  password_reset_apply  project  project_favorite
-  project_file  project_like  project_review  project_tag  project_version
-  project_view_daily  project_view_hourly  report  tag  upload_session  user
+  agreement_version  asset  asset_series  bug_feedback  build_task  category
+  comment  comment_like  developer_profile  flyway_schema_history  follow
+  im_message  im_session  im_session_member  notification  operation_log
+  password_reset_apply  project  project_favorite  project_file  project_like
+  project_review  project_series  project_tag  project_version  project_view_daily
+  project_view_hourly  report  tag  upload_session  user
   ```
+
+- 2.0.6 新增表/列（详见第十三章）：
+  - `project_series` / `asset_series`：`series_id / user_id / name(80) / intro(255) / is_public / 时间戳`，`UNIQUE(user_id, name)`，FK `user` ON DELETE CASCADE
+  - `asset`：`asset_id / user_id / series_id / name / file_name / asset_type(enum) / mime / file_size / sha256 / storage_path / is_public / is_deleted / 时间戳`
+  - `project.series_id`（FK → `project_series` ON DELETE **SET NULL**）、`upload_session.kind ENUM('project','asset')`
 
 - **字段名易坑**（写 SQL 前必查）：
   - `project`：作者列是 **`author_id`**（不是 `user_id`）；含 `status`（0 草稿 / 1 审核中 / 2 已发布）、`audit_mode`、`is_deleted`、`down_reason`、`reject_reason`
   - `project_file`：关联 `project_version_id`（不是 `project_id`），路径列 `storage_path`，另有 `scan_status`、`build_status`
   - `project_version`：`project_version_id / project_id / version_no / changelog / created_by`
-  - `upload_session`：`upload_session_id / user_id / project_id / uploaded_chunks / status / storage_path`，`status=1` 表示完成
-- 当前数据量参考（11-15 22:20 实测，非估算）：
-  - `project` **27 行**（草稿 4 / 已发布 18 / 软删 5，`project_id` 最大 228）
-  - `project_file` 22 行、`project_version` 22 行
-  - `project_view_hourly` 523 行、`project_view_daily` 201 行
-  - `user` 15 个（type=2 开发者 14 + type=3 管理员 1，**当前没有 type=1 普通用户**）
-  - `upload_session` 16 行，`status` 全为 1（无悬挂会话）
-  - 待办池为空：无 `status=1`（审核中）项目、无 `status=0`（未处理）举报
+  - `upload_session`：`upload_session_id / user_id / project_id / kind / uploaded_chunks / status / storage_path`，`status=1` 表示完成，`kind` 区分项目源码 / 素材
+  - `asset`：`user_id`（上传者）、`series_id`（可空）、`storage_path` 形如 `assets/{asset_id}/{file_name}`、`is_deleted` 是**软删**（直链文件保留，避免历史 HTML 裂图）
+- 当前数据量参考（11-19 16:20 实测，非估算）：
+  - `project` **43 行**、`user` **17 个**、`upload_session` 34 行、`asset` 0 行（素材刚上线）
+  - `project_series` / `asset_series` 均为 0 行（验证数据已清理，见 13.6）
+  - 早期基线（11-15 22:20）：`project` 27 / `project_file` 22 / `project_version` 22 / `project_view_hourly` 523 / `project_view_daily` 201
   - ⚠️ 旧版本文档里「project 约 228 条」是**误记**（把 `max(project_id)=228` 当成了行数），引用数据量以本节为准
 - 账号模型：`user.type` = 1 普通 / 2 开发者 / 3 管理员；`token_version` 参与 JWT 失效判定
 
-### 2.3 接口总览（9 个 Controller，共约 69 个端点）
+### 2.3 接口总览（11 个 Controller，共 87 个端点）
 
 | Controller | 基路径 | 端点数 | 说明 |
 | --- | --- | --- | --- |
@@ -128,10 +134,12 @@ E:\Project Files\COC_rebuild
 | UploadController | `/api/v1/uploads` | 4 | `POST /uploads/init`、`/uploads/{id}/parts`、`/uploads/{id}/complete`、`GET /uploads/{id}` |
 | FileController | `/api/v1` | 2 | `GET /files/{project_file_id}/content`、`GET /run/{project_id}/**` |
 | ImController | `/api/v1/im` | 6 | 会话列表、开一对一、消息收发、已读 |
-| InteractionController | `/api/v1` | 8 | 评论、点赞、收藏、关注、举报 |
+| InteractionController | `/api/v1` | 9 | 评论、点赞、收藏、关注、举报 |
 | UserController | `/api/v1` | 4 | `GET /users/{id}`、`/users/me/projects`、`/follow-status` |
 | MetaController | `/api/v1` | 2 | `GET /categories`、`GET /system/health` |
-| AdminController | `/api/v1/admin` | 23 | 审核 `reviews/{v}/approve|reject`、`projects/{p}/down|restore|undelete|storage`、评论/举报/开发者申请/改密申请/用户管理 |
+| **AssetController**（2.0.6 新增） | `/api/v1/assets` | 7 | `GET ""`（公开广场）/ `GET /mine` / `GET /{id}` / `POST /upload/init` / `POST /upload/{sid}/complete` / `PUT /{id}` / `DELETE /{id}` |
+| **SeriesController**（2.0.6 新增） | `/api/v1/series` | 5 | `GET ""?kind=` / `GET /public?kind=&user_id=` / `POST ""` / `PUT /{id}` / `DELETE /{id}?kind=` |
+| AdminController | `/api/v1/admin` | 28 | 审核 `reviews/{v}/approve|reject`、`projects/{p}/down|restore|undelete|storage`、评论/举报/开发者申请/改密申请/用户管理（`source-files`、`stats/platform/trend` 等） |
 
 - 鉴权：`AuthInterceptor` + JWT（HS256，claims `sub`=user_id、`type`、`tv`=token_version）
 - 前端 token 存 `localStorage.coc_token`，用户信息存 `coc_user`
@@ -170,12 +178,14 @@ E:\Project Files\COC_rebuild
   ├── ''                 home           首页（热门榜 / 最新 / 分类筛选）
   ├── projects/:id       project-detail 项目详情（沙箱 iframe 运行 + 评论）
   ├── users/:id          user-profile   用户主页
+  ├── materials          assets         **素材库（2.0.6 新增）**：公开素材广场 + 预览 + 复制直链
   ├── dev-apply          dev-apply      开发者申请
   └── forgot             forgot         联系管理员/找回
 /login                   login          登录（?redirect= 回跳）
 /                        ConsoleLayout（requiresAuth, area=user）
   ├── upload             upload         投稿上传（三步向导：选类型 → 填信息存草稿 → 上传/粘贴源码 → 提交）
-  ├── me/projects        me-projects    我的作品
+  ├── me/projects        me-projects    我的作品（含项目系列标签条 + 系列管理）
+  ├── me/materials       me-assets      **我的素材（2.0.6 新增）**：上传 / 系列归类 / 公开性开关 / 复制直链
   ├── me/dashboard       me-dashboard   数据看板
   ├── me/reports         me-reports     我的举报
   ├── messages           messages       私信
@@ -198,7 +208,7 @@ E:\Project Files\COC_rebuild
 
 ### 3.3 上传向导（Upload.vue）行为要点（排查热点）
 
-- 三步 `v-show`：`step 0` 选类型（`html` / `scratch` / `structure`，**没有 `mcstructure`**），`step 1` 填标题+简介+分类+标签，`step 2` 上传/粘贴源码 + 封面 + 提交
+- 三步 `v-show`：`step 0` 选类型（**只剩 `html` / `scratch`**；`structure` 已于 2.0.6 下线，后端 `createDraft` 对 `project_type='structure'` 直接 400），`step 1` 填标题+简介+分类+**项目系列**+标签，`step 2` 上传/粘贴源码 + 封面 + 提交
 - `canNext = !!title.trim() && !!summary.trim()`（分类/标签非必填）；`canSubmit = 有 project_file_id 或 已有 project_id`
 - `saveDraft()` → `POST /api/v1/projects`；**该接口只写 DB，不碰存储目录**（"草稿建不出来"与 storage 无关）
 - 已加防护（11-15，v2.0.3 重做）：
@@ -222,13 +232,14 @@ E:\Project Files\COC_rebuild
   uploads\        分片临时区
   covers\         封面
   avatars\        头像
+  assets\{asset_id}\{file_name}   素材（2.0.6 新增，nginx ^~ /media/ 直出）
   downloads\      APK 等下载物（由 nginx ^~ /downloads/ 直出）
   agreements\ im\ 协议 / 私信附件
   ```
 - nginx 站点：`E:\programs\nginx\conf\sites\coc.conf`（`listen 8084`，`server_name _`，`client_max_body_size 256m`）
   - 反代：`/api/` → `http://coc_backend`（=127.0.0.1:8090），`/ws` → `http://coc_backend/ws`（`proxy_read_timeout 3600s`）
   - 微缓存 `coc_micro`：`/api/v1/projects` 20s、`/projects/{id}` 20s、`/categories` 5m、`/run/` 60s；**全部带 `proxy_cache_bypass $http_authorization`**（带 token 一律 BYPASS，不串号），只缓存 200
-  - 静态直出：`/covers/` → `E:/Server Data/coc-platform/covers/`、`/avatars/`、`/downloads/`、`= /qr-live.png`、`= /nginx-health`
+  - 静态直出：`/covers/` → `E:/Server Data/coc-platform/covers/`、`/avatars/`、`/downloads/`、**`/media/` → `E:/Server Data/coc-platform/assets/`（2.0.6 新增，素材直链，`expires 30d` + `nosniff`）**、`= /qr-live.png`、`= /nginx-health`
   - SPA 兜底：`location /` → `try_files ... /index.html`
 - 出口：cloudflared ingress 把 `collectionofcreations.uk` / `www.` → `:8084`
 
@@ -254,13 +265,14 @@ E:\Project Files\COC_rebuild
   | 2.0.3 | 13 | 11-15 22:19（输入框修复） |
   | **2.0.4** | **14** | 11-19 10:36（视图切换 + 全屏横屏） |
   | **2.0.5** | **15** | 11-19 11:21（虚拟按键：双摇杆 + 自定义按键） |
+  | **2.0.6** | **16** | 11-19 16:04（下线 mcstructure + 素材库 + 项目/素材系列） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 / 2.0.4 / 2.0.5 已按此规则执行：code 13 / 14 / 15，从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 已按此规则执行：code 13 / 14 / 15 / 16，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -308,12 +320,10 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/latest`
-- 本地 `apk-build\dist\`：v1.0 → v2.0.5 共 23 个历史包（含 `coc-app-v2.0.5-20261119-1121.apk` = 最新）
-- 当前线上 `coc-app-2.0.5.apk` = `coc-app-latest.apk` = **3,864,431 B**（2.0.5 / code 15，签名 `CN=Collection of Creations`，sha256 `1451960d…6bbd`）
-- sha256 `2dfd518fca0f7cd16a507542bc58e9a3bc679add33439cfde2ab095d51e2f843`（公网实下一致）
-- 本地自测下载正常：`http://127.0.0.1:8084/downloads/coc-app-latest.apk` → 200 / 3,855,581 B（对外走 Cloudflare 仍需按 5.4 验字节数）
-- `version.json` / `version.txt` 已同步为 2.0.5 / 15（`updatedAt` 2026-11-19 11:21）
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/latest`
+- 当前线上 `coc-app-2.0.6.apk` = `coc-app-latest.apk` = **3,864,440 B**（2.0.6 / code 16，签名 `CN=Collection of Creations`，sha256 `fd71292cd183755ef83f6b78243527cb503f99a97d1335b744c4374b7060d41e`）
+- 公网实下一致（`Cache-Control: no-store` + `cf-cache-status: BYPASS`，不会再被 CF 缓存成旧包）
+- `version.json` / `version.txt` 已同步为 2.0.6 / 16
 
 ---
 
@@ -324,7 +334,7 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 | 1 | **App 端"无法创建项目草稿"** | ✅ **已定位并修复（v2.0.3）**：根因是输入框容器失效——App 里中文输入法打字，输入框有字但 `v-model` 收不到值，`title/summary` 恒为空，按钮 `:disabled` 死锁，请求从未发出（nginx 日志里 Android UA 零 `POST /api/v1/projects` 即为证据）。改法见第十章。**待用户装 2.0.3 实测确认** |
 | 2 | **APK 下载被 CF 链路截断** | 实测 1,015,808/3,850,562 B；下载后需校验字节数，必要时用系统浏览器/下载器重试（2.0.3 本地直连 3,853,343 B 正常，对外链路仍待验） |
 | 3 | **versionCode 回退与重复**（2.0=11 < 1.11=12；2.0.1 与 2.0.2 同为 12） | ✅ 2.0.3 已用 code=13，规则写入 5.1；后续继续 +1 |
-| 4 | 27 个已跟踪文件 + `docs/` 未提交 | **用户要求暂不提交**，等 2.0.3 实测通过后统一整理（先备份 dist/APK） |
+| 4 | 未提交改动堆积 | 2.0.3~2.0.5 已入库推送；**2.0.6 的素材/系列改动 + 并行会话的 bug_feedback 改动仍未提交**，提交前按路径挑拣（见「版本控制状态」） |
 | 5 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
 | 6 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
 | 7 | `/admin` 未挂 Cloudflare Access | 建议加，避免后台裸奔 |
@@ -601,5 +611,117 @@ VirtualPad（父页面/触摸层）
 - `vite.config.js`：加 `base: mode === 'user' ? '/user/' : '/'`（`dist-user` 挂在 `/user/` 下，原来资源写 `/assets/*` 被主站抢走 → 入口 chunk 404）。
 
 **验证**：`grep -rl "127.0.0.1:8090" dist/assets/*.js` 仅剩 `AppState` 的报错文案；`/downloads/coc-app-2.0.5.apk` 200 / 3,864,431 B；`/user/` 及其 4 个资源全 200；公网 index 已切 `index-BG7EI2uG.js`。
+
+---
+
+## 十三、v2.0.6 记录（2026-11-19 16:04）· 下线 mcstructure + 素材库 + 项目/素材系列
+
+### 13.1 需求（用户原话要点）
+
+1. 移除 mcstructure 板块，新增项目素材上传，**素材板块全方位替代**原 mcstructure 板块；
+2. 新增**项目系列 / 素材系列**创建功能：上传时可选择归入现有系列、也可现场新建系列；个人界面可查看自己的系列；系列只装同类（项目系列只有项目，素材系列只有素材）；
+3. 用素材展示替代原 mcstructure 展示界面，**每个素材可一键复制直链**（`baseurl/media/...` 这种能直接访问文件的形式）；
+4. 支持视频 / 图片 / GIF / 音频 / JSON；概览界面能播放视频、GIF、音频，能展示图片与 JSON 内容；
+5. 上传时与上传后（个人素材界面）都能改公开性；
+6. 素材系统核心是「上传 + 复制直链给用户自己的 HTML 用」，大文件复用 HTML 板块的分片上传；
+7. 数据结构：系列含 `id / user_id / 名称 / 简介`；素材含 `id / user_id / 所属系列 id（可空）`；
+8. 数据库交互优先「系列 id → user_id → user_id + 素材 id 联合查」以减少计算；
+9. 完成后 web 重建上 nginx、App 打包 2.0.6 上官网。
+
+### 13.2 关键决策（后续接手别推翻）
+
+| 决策 | 原因 |
+| --- | --- |
+| **mcstructure 软下线**：前端入口全撤、`ProjectService.createDraft` 对 `project_type='structure'` 返回 400，但 `project_type` 枚举值保留、历史项目仍可打开 | 已发布作品链接一旦 404，对作者不可接受 |
+| **素材直链由 nginx 静态直出**（`/media/` → 存储根 `assets/`），不走后端接口 | 直链要嵌进用户 HTML，必须不依赖登录态、不消耗后端 |
+| **`is_public` 只控制「是否可被检索/出现在广场」**，直链本身不鉴权 | 同上；若直链要鉴权，用户已发布作品会集体裂图 |
+| **素材删除是软删**（`is_deleted=1`，文件留盘） | 历史 HTML 引用不断链 |
+| **素材类型白名单硬编码，故意排除 `html/svg/js`** | 防止素材库被当成第二个 HTML 托管入口（可执行内容 + 同源直链 = XSS 风险） |
+| **素材与项目共用一套分片上传**（`upload_session.kind` 分流） | 避免维护两套分片/秒传/sha256 校验 |
+| **系列删除时子项 `SET NULL`** | 删系列不该顺手删作品/素材 |
+| `SeriesMapper` 用 `${table}` 拼表名但值只来自 `Kind` 枚举白名单 | 两套结构完全一致的系列用一份 SQL；枚举不进请求参数，无注入面 |
+
+### 13.3 涉及文件
+
+**后端（新增）**
+
+```
+backend/src/main/resources/db/migration/V4__assets_and_series.sql
+backend/.../controller/AssetController.java      /api/v1/assets（7 端点）
+backend/.../controller/SeriesController.java     /api/v1/series（5 端点）
+backend/.../mapper/SeriesMapper.java             两套系列共用 SQL
+backend/.../mapper/AssetMapper.java
+backend/.../service/SeriesService.java           Kind 枚举 + ensureByName
+backend/.../service/AssetService.java            ~470 行，类型白名单 + init/complete/CRUD
+```
+
+**后端（改动）**
+
+```
+backend/.../storage/StorageService.java   init() 建 assets/；assetsDir() / assetDir(id)
+backend/.../mapper/UploadMapper.java      insertSession 写 kind；findSession 带出 kind
+backend/.../service/UploadService.java    抽出 materialize(sessionId, session)（合并分片+校验 sha256+秒传）
+backend/.../service/ProjectService.java   RETIRED_TYPES；series_id / new_series_name；detail 带 series_projects
+backend/.../mapper/ProjectMapper.java     findProjectById JOIN 系列；listBySeries；insert/update 写 series_id；listMine 带系列
+backend/.../auth/AuthInterceptor.java     系列与素材写操作的登录白名单
+```
+
+**前端（新增）**
+
+```
+frontend/src/components/AssetUploader.vue   上传组件（拖拽 + 元数据 + 分片 + 单片重试 3 次）
+frontend/src/views/Assets.vue               公开素材库 /materials
+frontend/src/views/MeAssets.vue             我的素材 /me/materials
+```
+
+**前端（改动）**：`api/index.js`（`seriesApi` / `assetApi`）、`utils/format.js`（`ASSET_TYPE` 等 + `isAutoApproved` 只认 scratch）、`utils/platform.js`（`v2.0.6`）、`router/index.js`、`Home.vue`、`BottomTabBar.vue`、`ConsoleLayout.vue`、`Upload.vue`、`MeProjects.vue`、`ProjectDetail.vue`、`ChunkUploader.vue`、`Downloads.vue`（2.0.6 条目）
+
+**仓库外**：`E:/programs/nginx/conf/sites/coc.conf` 新增 `location ^~ /media/`
+
+### 13.4 必须记住的坑
+
+1. **`/assets` 不能当路由**：SPA 构建产物就放在 `dist/assets/`，把素材库路由写成 `/assets` 会被 nginx 当成静态目录，线上 301。**已统一改成 `/materials` 与 `/me/materials`**，以后加路由先避开 `assets`。
+2. **`no_series` 必须归一化**：前端传 `1` / `"1"`，MyBatis `<if test='no_series == true'>` 不认。统一在 Service 层用 `Params.bool(p, "no_series")`。同理 `is_public` 的 JSON `true` 也要走 `Params.bool`。
+3. **Flyway 版本号会被并行会话抢占**：本次原本写 `V3__assets_and_series.sql`，另一个会话已建 `V3__bug_feedback.sql` → 启动报 `Found more than one migration with version 3`。**改名前先 `ls db/migration`**，撞了就顺延，已经跑过的版本号不要复用。
+4. **`mvn package` 报 `Unable to rename ... jar`**：`coc-backend` 服务正持有 jar。先 `Stop-Service coc-backend -Force`，打包完再 `Start-Service`。
+5. **即时上传（秒传）的源文件不能直接 move**：`completeUpload` 里若走 `materialize()` 拿到的是已有文件引用，必须 **copy** 到 `assets/{id}/`，否则会把项目源码目录里的文件搬走。
+6. **`apksigner.bat` 路径带空格会失败**：用 `java -jar "E:/Server Data/android-sdk/build-tools/35.0.0/lib/apksigner.jar" verify --print-certs` 代替。
+
+### 13.5 发布与验证
+
+| 项 | 结果 |
+| --- | --- |
+| 数据库 | Flyway 到 **v4**（V3 bug_feedback + V4 assets/series 均 success），31 表 |
+| 后端 | `mvn clean package` 后重启 `coc-backend`，`/api/v1/system/health` 正常 |
+| 前端 | 产物 `index-Cb1rm9_k.js`；`/`、`/materials`、`/me/materials`、`/downloads` 全 200；公网 index 已同步（带时间戳取到同一 hash） |
+| App | 2.0.6 / code 16，3,864,440 B，sha256 `fd71292c…41e`，签名 `CN=Collection of Creations` |
+| 素材链路 | 建系列 → init → parts → complete → `GET /media/3/测试图-1x1.png` = 200 / `image/png` / 70 B / 字节一致 / `max-age=2592000` |
+| 素材权限 | 公开列表可见 → 改私密后匿名访问详情 404；`mine` 每行带 `url` |
+| 项目系列 | `POST /projects` 带 `new_series_name` → 详情 `series_id`/`series_name`/兄弟项目 1 个；`listMine` 带系列字段；`project_type='structure'` → **400** |
+| 浏览器 E2E | ✅ 已补跑（Playwright + 独立 Chromium headless，脚本 `E:/Server Data/tmp/coc-verify/ui-assets-e2e.cjs`）：我的素材渲染/缩略图加载、复制直链（真实剪贴板 `…/media/14/e2e-测试图.png` → 200 / `image/png` / 61,407 B / 字节一致）、图片 `naturalWidth>0`、JSON 格式化文本、音频 `readyState=4 duration=0.2`、公开性开关（关闭后广场消失 + 匿名详情 404 + 直链仍 200；打开后回归）、`requestfailed=0` |
+
+### 13.5.1 无头浏览器验证的正确姿势（重要）
+
+1. **别用 `127.0.0.1` 跑本站 UI**：`http.js` 的 `IS_NATIVE_SHELL` 把 hostname `127.0.0.1|localhost` 判成 Capacitor 壳 → API 走 `https://collectionofcreations.uk/api/v1` 绝对地址 → 跨源 CORS 全灭，页面只显示「哎呀，卡住了」。
+   **用 `http://127.0.0.2:8084`**：仍属回环（secure context，`navigator.clipboard` 可用；Chromium 默认绕过系统代理），但 hostname 不等于 `127.0.0.1`，前端按普通网页处理。
+2. **别自定义域名**：宿主机有 `http_proxy=127.0.0.1:64070`，`coc.test` 这类名字会被代理劫持返回 502（`--no-proxy-server` 也压不住）。
+3. **别用系统 Edge**：nexus-desktop 会抢走 `msedge.exe` 并静默退出。用 `npx playwright@1.49.0 install chromium` 装的独立 Chromium（`%LOCALAPPDATA%\ms-playwright\chromium_headless_shell-1148`）+ `playwright-core`。
+
+### 13.6 清理
+
+验证产生的测试数据已全部清掉：`project` #245（【自动化测试】系列归属）、`project_series` #4（测试项目系列-60311）、`asset` #1~#3 及其 `E:/Server Data/coc-platform/assets/{1,2,3}` 目录。**注意**：测试 JWT 用的是真实用户 #115（哈哈哈）的身份，只删数据、没动账号。
+
+### 13.7 待实测点（2.0.6）
+
+> ✅ 第 1~4 项已在**桌面浏览器 E2E** 里机器验证过（见 13.5 / 13.5.1）；仍需要真机确认的是 App 端与移动端手势、大文件、升级路径。
+
+1. 📱 手机 App 里上传一张图 → 回「我的素材」看到缩略图 → 点复制链接 → 粘到浏览器地址栏能直接打开图片（桌面端已验证，App 端待确认剪贴板权限）；
+2. 📱 把该素材设为私密 → 退出登录后在 `/materials` 看不到它 → 但**已知直链仍能打开**（预期行为，见 13.2）；
+3. 上传 mp4 / mp3 / gif，在预览弹窗里能正常播放（音频 wav 已验证 `readyState=4`，**视频未验**）；
+4. ✅ 上传 json，预览能看到格式化内容（已验证）；
+5. 投稿时新建一个项目系列 → 存草稿 → 「我的作品」顶部出现该系列标签，点击能筛出这条；
+6. 系列管理里删掉该系列 → 项目回到「未归系列」，作品本身没消失；
+7. 用一个 >100MB 的素材上传，确认分片上传能跑完（走的是项目源码那条分片链路）；
+8. 覆盖安装 2.0.5 → 2.0.6 是否被拦（code 16 > 15，理论上通过）。
 
 **注意**：APK 不受影响（原生壳走 `ORIGIN` 分支），无需重打包；网页端需硬刷新（Ctrl+F5）清掉旧 chunk 缓存。

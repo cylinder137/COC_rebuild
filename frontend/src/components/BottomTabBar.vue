@@ -28,13 +28,12 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-/* 顺序按二期反馈第 5 条：全部项目 / html / scratch / mcstructure / 上传项目 / 个人主页
-   「上传项目」用主题色背景板强调 */
+/* 五期：MC 结构板块下线，原位置改为「素材」（素材库替代结构文件分享） */
 const tabs = computed(() => [
   { key: 'all', label: '全部项目', icon: 'Grid', query: {} },
   { key: 'html', label: 'HTML', icon: 'Monitor', query: { project_type: 'html' } },
   { key: 'scratch', label: 'Scratch', icon: 'Cpu', query: { project_type: 'scratch' } },
-  { key: 'structure', label: 'MC结构', icon: 'Box', query: { project_type: 'structure' } },
+  { key: 'assets', label: '素材', icon: 'Picture', to: '/materials' },
   { key: 'upload', label: '上传项目', icon: 'Upload', to: '/upload', primary: true },
   { key: 'me', label: '个人主页', icon: 'User', to: 'me' }
 ])

@@ -85,7 +85,7 @@ http.interceptors.response.use(
     if (!body || typeof body !== 'object' || !('code' in body)) return body
     if (body.code === 0) return body.data
     // 业务错误：统一提示，但把错误抛给调用方以便显示区块级错误态
-    if (!res.config?.silent) ElMessage.error(body.message || '请求失败')
+    if (!res.config?.silent) ElMessage.error(body.message || '哎呀，出了点小状况，再试一次吧～')
     return Promise.reject(Object.assign(new Error(body.message || '请求失败'), { code: body.code, business: true }))
   },
   (err) => {
@@ -105,7 +105,7 @@ http.interceptors.response.use(
         const here = window.location.pathname + window.location.search
         const loginPath = `${base}login`.replace(/\/{2,}/g, '/')
         const alreadyLogin = window.location.pathname.startsWith(loginPath)
-        ElMessage.warning('登录已失效，请重新登录')
+        ElMessage.warning('登录过期啦，重新登录一下吧～')
         setTimeout(() => {
           redirecting = false
           // 已经在登录页就不要再跳（避免 ?redirect=/login 自我循环）
@@ -115,11 +115,11 @@ http.interceptors.response.use(
       return Promise.reject(Object.assign(err, { code: 401, http401: true }))
     }
     if (!err.config?.silent) {
-      if (status === 403) ElMessage.error(msg || '没有权限')
-      else if (status === 404) ElMessage.error(msg || '资源不存在')
-      else if (err.code === 'ECONNABORTED') ElMessage.error('请求超时，请稍后重试')
-      else if (!err.response) ElMessage.error('无法连接后端服务（8090 可能未启动）')
-      else ElMessage.error(msg || `请求失败（${status}）`)
+      if (status === 403) ElMessage.error(msg || '这个门暂时打不开哦～')
+      else if (status === 404) ElMessage.error(msg || '找了一圈，没找到你要的东西～')
+      else if (err.code === 'ECONNABORTED') ElMessage.error('信号有点慢，等得花儿都谢了～ 稍后再试一次吧')
+      else if (!err.response) ElMessage.error('啊哦，网络离家出走啦～ 检查一下信号再试试？')
+      else ElMessage.error(msg || '这次没成功，稍后再试试吧～')
     }
     return Promise.reject(err)
   }

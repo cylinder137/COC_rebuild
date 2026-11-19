@@ -9,7 +9,7 @@
     </div>
 
     <AppState :loading="loading && !list.length" :error="error" :empty="!loading && !error && !list.length"
-      empty-text="没有用户数据" empty-desc="后端 /admin/users 可能尚未实现（契约里未列该 GET 接口）。" :skeleton-count="4" @retry="load">
+      empty-text="没有用户数据" empty-desc="暂时没拿到用户列表，稍后再试试。" :skeleton-count="4" @retry="load">
       <el-table :data="list" style="width:100%">
         <el-table-column prop="user_id" label="ID" width="70" />
         <el-table-column label="QQ / 昵称" min-width="180">

@@ -81,7 +81,7 @@ async function submit() {
   const r = await safe(authApi.forgot({ ...form }))
   loading.value = false
   if (!r.ok) {
-    ElMessage.error(r.error?.response?.data?.message || '提交失败（后端 8090 可能未启动），也可直接联系管理员 QQ 3254328344')
+    ElMessage.error(r.error?.response?.data?.message || '哎呀，没提交成功，稍后再试试～ 也可以直接联系管理员 QQ 3254328344')
     return
   }
   applyId.value = r.data?.apply_id || '—'

@@ -11,7 +11,7 @@
     </div>
 
     <el-steps :active="step" finish-status="success" align-center class="mb24">
-      <el-step title="选择类型" description="HTML / Scratch / 结构" />
+      <el-step title="选择类型" description="HTML / Scratch" />
       <el-step title="填写信息" description="标题、简介、分类" />
       <el-step title="上传并提交" description="分片上传 · 支持续传" />
     </el-steps>
@@ -59,6 +59,25 @@
         <el-form-item label="详细介绍">
           <div data-field="description" class="fld">
             <el-input v-model="form.description" type="textarea" :rows="5" maxlength="2000" show-word-limit placeholder="玩法说明、操作方式、素材来源等" />
+          </div>
+        </el-form-item>
+        <el-form-item label="项目系列">
+          <div class="row gap8 center wrap" style="width:100%">
+            <el-select
+              v-model="form.series_id"
+              clearable
+              placeholder="可不选；同一系列的作品会成体系展示"
+              style="flex:1;min-width:200px"
+            >
+              <el-option v-for="s in mySeries" :key="s.series_id" :label="s.name" :value="s.series_id" />
+            </el-select>
+            <el-input
+              v-model="form.new_series_name"
+              placeholder="或新建系列"
+              maxlength="80"
+              style="width:170px"
+              data-field="series"
+            />
           </div>
         </el-form-item>
         <el-form-item label="分类">
@@ -201,7 +220,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChunkUploader from '@/components/ChunkUploader.vue'
 import CoverUploader from '@/components/CoverUploader.vue'
-import { categoryApi, uploadApi, safe } from '@/api'
+import { categoryApi, seriesApi, uploadApi, safe } from '@/api'
 import { reportClientError } from '@/api/http'
 import { isAutoApproved } from '@/utils/format'
 import { attachFieldSync, focusField, pullFields, readDomField } from '@/utils/formDom'
@@ -225,8 +244,18 @@ const form = reactive({
   description: '',
   category_id: '',
   cover_path: '',
-  tags: []
+  tags: [],
+  // 五期：项目系列（可不选；填 new_series_name 会就近建一个）
+  series_id: null,
+  new_series_name: ''
 })
+
+/** 我的项目系列（用于「归档到现有系列」） */
+const mySeries = ref([])
+async function loadSeries() {
+  const r = await safe(seriesApi.mine('project'))
+  mySeries.value = r.ok && Array.isArray(r.data) ? r.data : []
+}
 
 /* ---- 粘贴 HTML 源码（二期反馈第 2 条） ---- */
 const chunkRef = ref(null)
@@ -261,10 +290,10 @@ async function uploadPasted() {
   }
 }
 
+/* 五期：MC 结构板块下线（结构文件改到「素材」上传后引用直链） */
 const types = [
   { value: 'html', label: 'HTML 网页', desc: 'zip 或 html 包，可含 JS', color: 'var(--c-type-html)', icon: 'Monitor', auto: false },
-  { value: 'scratch', label: 'Scratch 作品', desc: '.sb2 / .sb3 积木项目', color: 'var(--c-type-scratch)', icon: 'Cpu', auto: true },
-  { value: 'structure', label: 'MC 结构', desc: '.mcstructure 纯数据', color: 'var(--c-type-structure)', icon: 'Box', auto: true }
+  { value: 'scratch', label: 'Scratch 作品', desc: '.sb2 / .sb3 积木项目', color: 'var(--c-type-scratch)', icon: 'Cpu', auto: true }
 ]
 
 const isAuto = computed(() => isAutoApproved(form.project_type))
@@ -370,6 +399,9 @@ async function saveDraft() {
     category_id: form.category_id || null,
     tags: (Array.isArray(form.tags) ? form.tags : []).slice(0, 5)
   }
+  // 项目系列：选已有系列优先；没选但有新名字就让后端建（同名会复用）
+  if (form.series_id) payload.series_id = form.series_id
+  else if ((form.new_series_name || '').trim()) payload.new_series_name = form.new_series_name.trim()
   // 封面是在草稿建好之后由 CoverUploader 直接写库的，这里空值不能回传（否则会把已上传的封面覆盖成空）
   if (form.cover_path) payload.cover_path = form.cover_path
 
@@ -502,6 +534,7 @@ onMounted(async () => {
   }
   const r = await safe(categoryApi.list())
   if (r.ok && Array.isArray(r.data)) categories.value = r.data
+  loadSeries()
 })
 
 onBeforeUnmount(() => {

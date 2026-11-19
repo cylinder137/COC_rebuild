@@ -47,23 +47,33 @@ public interface ProjectMapper {
     long countPublished(Map<String, Object> param);
 
     @Select("SELECT p.*, CASE WHEN u.status = 3 THEN '用户已注销' ELSE u.nickname END AS author_nickname, "
-            + "u.avatar_path AS author_avatar, u.status AS author_status, c.name AS category_name "
+            + "u.avatar_path AS author_avatar, u.status AS author_status, c.name AS category_name, "
+            + "s.name AS series_name, s.is_public AS series_is_public "
             + "FROM project p JOIN `user` u ON u.user_id = p.author_id "
             + "LEFT JOIN category c ON c.category_id = p.category_id "
+            + "LEFT JOIN project_series s ON s.series_id = p.series_id "
             + "WHERE p.project_id = #{project_id}")
     Map<String, Object> findProjectById(@Param("project_id") long projectId);
 
-    @Insert("INSERT INTO project (author_id, title, summary, description, project_type, category_id, cover_path, "
+    /** 项目系列下属项目（详情页 / 个人主页「同系列」用） */
+    @Select("SELECT p.project_id, p.title, p.summary, p.cover_path, p.project_type, p.status, p.published_at "
+            + "FROM project p WHERE p.series_id = #{series_id} AND p.is_deleted = 0 "
+            + "ORDER BY p.project_id DESC")
+    List<Map<String, Object>> listBySeries(@Param("series_id") long seriesId);
+
+    @Insert("INSERT INTO project (author_id, title, summary, description, project_type, category_id, series_id, cover_path, "
             + "status, audit_mode, is_deleted, created_at, updated_at) "
-            + "VALUES (#{author_id}, #{title}, #{summary}, #{description}, #{project_type}, #{category_id}, "
+            + "VALUES (#{author_id}, #{title}, #{summary}, #{description}, #{project_type}, #{category_id}, #{series_id}, "
             + "#{cover_path}, #{status}, #{audit_mode}, 0, NOW(), NOW())")
     @SelectKey(statement = "SELECT LAST_INSERT_ID()", keyProperty = "project_id", before = false, resultType = Long.class)
     int insertProject(Map<String, Object> param);
 
-    @Update("UPDATE project SET title = #{title}, summary = #{summary}, description = #{description}, "
+    @Update("<script>UPDATE project SET title = #{title}, summary = #{summary}, description = #{description}, "
             + "project_type = #{project_type}, category_id = #{category_id}, "
-            + "cover_path = COALESCE(#{cover_path}, cover_path), updated_at = NOW() "
-            + "WHERE project_id = #{project_id}")
+            + "cover_path = COALESCE(#{cover_path}, cover_path), updated_at = NOW()"
+            + "<if test='series_id != null'>, series_id = #{series_id}</if>"
+            + "<if test='clear_series == true'>, series_id = NULL</if>"
+            + " WHERE project_id = #{project_id}</script>")
     int updateProjectBasic(Map<String, Object> param);
 
     @Update("UPDATE project SET cover_path = #{cover_path}, updated_at = NOW() "
@@ -114,14 +124,18 @@ public interface ProjectMapper {
 
     @Select("<script>"
             + "SELECT p.project_id, p.title, p.summary, p.cover_path, p.project_type, p.category_id, p.status, "
-            + "p.audit_mode, p.like_count, p.favorite_count, p.comment_count, p.view_count_total, "
+            + "p.audit_mode, p.like_count, p.favorite_count, p.comment_count, p.view_count_total, p.series_id, "
             + "p.reject_reason, p.down_reason, p.is_deleted, p.published_at, p.created_at, p.updated_at, "
-            + "CASE WHEN u.status = 3 THEN '用户已注销' ELSE u.nickname END AS author_nickname, p.author_id "
+            + "CASE WHEN u.status = 3 THEN '用户已注销' ELSE u.nickname END AS author_nickname, p.author_id, "
+            + "s.name AS series_name "
             + "FROM project p JOIN `user` u ON u.user_id = p.author_id "
+            + "LEFT JOIN project_series s ON s.series_id = p.series_id "
             + "WHERE p.is_deleted = 0 "
             + "<if test='author_id != null'> AND p.author_id = #{author_id}</if>"
             + "<if test='status != null'> AND p.status = #{status}</if>"
             + "<if test='project_type != null and project_type != \"\"'> AND p.project_type = #{project_type}</if>"
+            + "<if test='series_id != null'> AND p.series_id = #{series_id}</if>"
+            + "<if test='no_series == true'> AND p.series_id IS NULL</if>"
             + " ORDER BY p.project_id DESC LIMIT #{limit} OFFSET #{offset}"
             + "</script>")
     List<Map<String, Object>> listMine(Map<String, Object> param);
@@ -130,6 +144,8 @@ public interface ProjectMapper {
             + "<if test='author_id != null'> AND p.author_id = #{author_id}</if>"
             + "<if test='status != null'> AND p.status = #{status}</if>"
             + "<if test='project_type != null and project_type != \"\"'> AND p.project_type = #{project_type}</if>"
+            + "<if test='series_id != null'> AND p.series_id = #{series_id}</if>"
+            + "<if test='no_series == true'> AND p.series_id IS NULL</if>"
             + "</script>")
     long countMine(Map<String, Object> param);
 
@@ -213,6 +229,10 @@ public interface ProjectMapper {
 
     @Update("UPDATE project_file SET build_status = #{build_status}, build_path = #{build_path} WHERE project_file_id = #{project_file_id}")
     int updateFileBuild(Map<String, Object> param);
+
+    /** 管理员在线编辑源码后，回写文件大小与 sha256 */
+    @Update("UPDATE project_file SET file_size = #{file_size}, sha256 = #{sha256} WHERE project_file_id = #{project_file_id}")
+    int updateFileMeta(Map<String, Object> param);
 
     @Select("SELECT project_file_id, project_version_id, file_type, file_name, sha256, storage_path "
             + "FROM project_file WHERE project_version_id = #{project_version_id} AND file_type = #{file_type} LIMIT 1")

@@ -12,6 +12,7 @@ const routes = [
     children: [
       { path: '', name: 'home', component: () => import('@/views/Home.vue'), meta: { title: '首页' } },
       { path: 'projects/:id', name: 'project-detail', component: () => import('@/views/ProjectDetail.vue'), meta: { title: '项目详情' } },
+      { path: 'materials', name: 'assets', component: () => import('@/views/Assets.vue'), meta: { title: '素材库' } },
       { path: 'users/:id', name: 'user-profile', component: () => import('@/views/UserProfile.vue'), meta: { title: '个人主页' } },
       { path: 'dev-apply', name: 'dev-apply', component: () => import('@/views/DevApply.vue'), meta: { title: '开发者申请' } },
       { path: 'downloads', name: 'downloads', component: () => import('@/views/Downloads.vue'), meta: { title: 'App 下载' } },
@@ -30,6 +31,7 @@ const routes = [
     children: [
       { path: 'upload', name: 'upload', component: () => import('@/views/Upload.vue'), meta: { title: '投稿上传', requiresAuth: true } },
       { path: 'me/projects', name: 'me-projects', component: () => import('@/views/MeProjects.vue'), meta: { title: '我的作品', requiresAuth: true } },
+      { path: 'me/materials', name: 'me-assets', component: () => import('@/views/MeAssets.vue'), meta: { title: '我的素材', requiresAuth: true } },
       { path: 'me/dashboard', name: 'me-dashboard', component: () => import('@/views/MeDashboard.vue'), meta: { title: '数据看板', requiresAuth: true } },
       { path: 'me/reports', name: 'me-reports', component: () => import('@/views/MeReports.vue'), meta: { title: '我的举报', requiresAuth: true } },
       { path: 'messages', name: 'messages', component: () => import('@/views/Messages.vue'), meta: { title: '消息中心', requiresAuth: true } },
@@ -49,6 +51,7 @@ const routes = [
       { path: 'projects/:id/storage', name: 'admin-storage', component: () => import('@/views/admin/AdminStorage.vue'), meta: { title: '存储路径', requiresAdmin: true } },
       { path: 'comments', name: 'admin-comments', component: () => import('@/views/admin/AdminComments.vue'), meta: { title: '评论管理', requiresAdmin: true } },
       { path: 'reports', name: 'admin-reports', component: () => import('@/views/admin/AdminReports.vue'), meta: { title: '举报处理', requiresAdmin: true } },
+      { path: 'bug-feedback', name: 'admin-bug-feedback', component: () => import('@/views/admin/AdminBugFeedback.vue'), meta: { title: 'Bug 反馈', requiresAdmin: true } },
       { path: 'developers', name: 'admin-developers', component: () => import('@/views/admin/AdminDevApplications.vue'), meta: { title: '开发者申请', requiresAdmin: true } },
       { path: 'password-resets', name: 'admin-resets', component: () => import('@/views/admin/AdminPasswordResets.vue'), meta: { title: '找回申请', requiresAdmin: true } },
       { path: 'users', name: 'admin-users', component: () => import('@/views/admin/AdminUsers.vue'), meta: { title: '账号管理', requiresAdmin: true } },

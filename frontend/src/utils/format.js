@@ -30,7 +30,42 @@ export function auditModeOf(type) {
 }
 
 export function isAutoApproved(type) {
-  return type === 'scratch' || type === 'structure' || type === 'mcstructure'
+  return type === 'scratch'
+}
+
+/* ---------------- 素材（五期） ----------------
+   素材类型只有 5 种：图片 / 动图(gif) / 视频 / 音频 / JSON。
+   直链由后端给出（/media/{id}/{file}），nginx 直接静态输出，
+   可以直接写进用户自己的 HTML：<img src="https://站点/media/12/a.png"> */
+export const ASSET_TYPE = {
+  image: { label: '图片', icon: 'Picture', color: 'var(--c-type-html)' },
+  gif: { label: '动图', icon: 'PictureFilled', color: 'var(--c-type-scratch)' },
+  video: { label: '视频', icon: 'VideoCamera', color: '#f97316' },
+  audio: { label: '音频', icon: 'Headset', color: '#22c55e' },
+  json: { label: 'JSON', icon: 'Document', color: '#38bdf8' }
+}
+
+export function assetTypeOf(t) {
+  return ASSET_TYPE[t] || { label: '文件', icon: 'Document', color: 'var(--c-text-3)' }
+}
+
+/** 素材直链（相对路径）。后端已回传 url 时直接用，否则按约定拼 */
+export function mediaUrlOf(a) {
+  if (!a) return ''
+  if (a.url) return a.url
+  if (!a.asset_id || !a.file_name) return ''
+  return `/media/${a.asset_id}/${a.file_name.split('/').map(encodeURIComponent).join('/')}`
+}
+
+/** 相对路径 → 绝对地址（复制给别人的链接必须是绝对地址） */
+export function absoluteUrl(p) {
+  if (!p) return ''
+  if (/^https?:\/\//i.test(p)) return p
+  try {
+    return window.location.origin + (p.startsWith('/') ? p : '/' + p)
+  } catch (e) {
+    return p
+  }
 }
 
 /** 12345 -> 1.2万；带 tooltip 用 fullNumber */

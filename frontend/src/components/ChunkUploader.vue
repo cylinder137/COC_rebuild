@@ -12,7 +12,7 @@
     >
       <el-icon :size="34" class="dim"><UploadFilled /></el-icon>
       <div class="drop-title">点击选择文件，或拖拽到此处</div>
-      <div class="xs dim">支持 .html / .zip / .sb2 / .sb3 / .mcstructure；单文件建议 &lt; 90MB 分片上限，大文件自动分片并支持断点续传</div>
+      <div class="xs dim">支持 .html / .zip / .sb2 / .sb3；单文件建议 &lt; 90MB 分片上限，大文件自动分片并支持断点续传（结构文件请到「我的素材」上传）</div>
       <input ref="inputRef" type="file" hidden @change="onPick" />
     </div>
 
@@ -200,7 +200,7 @@ async function startUpload(isRetry) {
     }))
     if (!r.ok) {
       state.value = 'error'
-      ElMessage.error('初始化上传失败（后端 8090 可能未启动）')
+      ElMessage.error('哎呀，上传没能开始，网络可能开小差了，再试一次吧')
       return
     }
     const d = r.data || {}

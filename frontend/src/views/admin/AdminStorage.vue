@@ -14,7 +14,7 @@
     </el-alert>
 
     <AppState :loading="loading" :error="error" :empty="!loading && !error && !data" empty-text="没有存储信息"
-      empty-desc="后端 /admin/projects/{id}/storage 可能尚未实现。" @retry="load">
+      empty-desc="暂时没拿到存储信息，稍后再试试。" @retry="load">
       <div v-if="data">
         <div class="card mb16">
           <div class="row center gap12 wrap">

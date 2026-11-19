@@ -14,14 +14,14 @@ import java.util.Map;
 @Mapper
 public interface UploadMapper {
 
-    @Insert("INSERT INTO upload_session (user_id, project_id, file_name, file_size, sha256, chunk_size, "
+    @Insert("INSERT INTO upload_session (user_id, project_id, kind, file_name, file_size, sha256, chunk_size, "
             + "total_chunks, uploaded_chunks, status, storage_path, instant_ref_project_file_id, created_at, updated_at) "
-            + "VALUES (#{user_id}, #{project_id}, #{file_name}, #{file_size}, #{sha256}, #{chunk_size}, "
+            + "VALUES (#{user_id}, #{project_id}, IFNULL(#{kind}, 'project'), #{file_name}, #{file_size}, #{sha256}, #{chunk_size}, "
             + "#{total_chunks}, #{uploaded_chunks}, #{status}, #{storage_path}, #{instant_ref_project_file_id}, NOW(), NOW())")
     @SelectKey(statement = "SELECT LAST_INSERT_ID()", keyProperty = "upload_session_id", before = false, resultType = Long.class)
     int insertSession(Map<String, Object> param);
 
-    @Select("SELECT upload_session_id, user_id, project_id, file_name, file_size, sha256, chunk_size, total_chunks, "
+    @Select("SELECT upload_session_id, user_id, project_id, kind, file_name, file_size, sha256, chunk_size, total_chunks, "
             + "uploaded_chunks, status, storage_path, instant_ref_project_file_id, created_at, updated_at "
             + "FROM upload_session WHERE upload_session_id = #{upload_session_id}")
     Map<String, Object> findSession(@Param("upload_session_id") long uploadSessionId);

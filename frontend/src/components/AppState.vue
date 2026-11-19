@@ -15,7 +15,7 @@
   <div v-else-if="error" class="state-wrap">
     <div class="state-box">
       <div class="state-ico error"><el-icon :size="30"><WarningFilled /></el-icon></div>
-      <div class="state-title">加载失败</div>
+      <div class="state-title">哎呀，卡住了</div>
       <div class="state-desc">{{ errorText }}</div>
       <div class="row gap12 center" style="margin-top:16px">
         <el-button type="primary" @click="$emit('retry')">
@@ -55,9 +55,11 @@ const errorText = computed(() => {
   if (typeof props.error === 'string') return props.error
   const e = props.error
   if (!e) return ''
-  if (e.http401 || e.code === 401) return '登录状态已失效，请重新登录后重试。'
-  if (!e.response) return '无法连接后端服务（127.0.0.1:8090 可能尚未启动）。请稍后重试。'
-  return e.response?.data?.message || e.message || `请求失败（HTTP ${e.response?.status || '未知'}）`
+  if (e.http401 || e.code === 401) return '登录过期啦，重新登录一下再回来吧～'
+  if (!e.response) return '啊哦，网络离家出走啦～ 检查一下信号，我们再试一次？'
+  const status = e.response?.status
+  if (status >= 500) return '服务器打了个盹儿，稍等一会儿再试试～'
+  return e.response?.data?.message || e.message || '这条内容暂时没加载出来，再试一次吧～'
 })
 </script>
 

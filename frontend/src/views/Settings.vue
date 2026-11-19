@@ -60,6 +60,30 @@
         </div>
       </section>
 
+      <!-- ============ 问题反馈 ============ -->
+      <section class="card sec">
+        <div class="sec-hd">
+          <el-icon><ChatDotSquare /></el-icon><span>问题反馈</span>
+        </div>
+        <p class="ri-d xs dim" style="margin:8px 0 10px">
+          遇到 Bug、页面异常或功能不符合预期，请尽量写清「做了什么 + 看到什么 + 设备和版本」，
+          管理员会按提交顺序处理。
+        </p>
+        <div data-field="content" class="fld">
+          <el-input
+            v-model="bug.content"
+            type="textarea"
+            :rows="4"
+            maxlength="1000"
+            show-word-limit
+            placeholder="例如：在 App「投稿上传」页填写标题后点保存并继续没有反应（App 2.0.4 / Android 14）"
+          />
+        </div>
+        <div class="bug-actions">
+          <el-button type="primary" :loading="bugLoading" @click="submitBug">提交反馈</el-button>
+        </div>
+      </section>
+
       <!-- ============ 账号安全 ============ -->
       <section class="card sec">
         <div class="sec-hd">
@@ -138,7 +162,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { authApi } from '@/api'
+import { authApi, interactApi } from '@/api'
 import { setToken } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, useUiStore, ACCENTS } from '@/stores/ui'
@@ -158,6 +182,27 @@ function onMode(v) { theme.setTheme(v) }
 function onAutoLoad(v) {
   ui.setAutoLoad(v)
   ElMessage.success(v ? '已开启自动预览' : '已关闭自动预览')
+}
+
+/* ---------------- 问题反馈 ---------------- */
+const bug = reactive({ content: '' })
+const bugLoading = ref(false)
+
+async function submitBug() {
+  // App 内 v-model 可能漏事件：提交前以 DOM 实际值为准
+  pullFields(bug, ['content'], { force: true })
+  const content = bug.content.trim()
+  if (!content) { ElMessage.warning('请先描述你遇到的问题'); return }
+  bugLoading.value = true
+  try {
+    await interactApi.bugFeedback({ content })
+    bug.content = ''
+    ElMessage.success('反馈已提交，管理员会尽快处理')
+  } catch (e) {
+    ElMessage.error(e?.message || '提交失败，请稍后重试')
+  } finally {
+    bugLoading.value = false
+  }
 }
 
 /* ---------------- 修改密码 ---------------- */
@@ -265,6 +310,7 @@ async function submitCancel() {
 .sw.on { border-color: var(--c-text-1); box-shadow: var(--sh-brand); }
 
 .acc-info { padding: 8px 12px; border-radius: var(--r-md); background: var(--c-bg-sunken); margin: 10px 0 6px; }
+.bug-actions { margin-top: 12px; }
 .pwd-form { margin-top: 10px; max-width: 520px; }
 /* data-field 包装层：撑满表单项宽度 */
 .fld { width: 100%; }

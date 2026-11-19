@@ -56,7 +56,8 @@ const activePath = computed(() => route.path)
 const userMenu = [
   { label: '创作', items: [
     { title: '我的作品', path: '/me/projects', icon: 'Files' },
-    { title: '投稿上传', path: '/upload', icon: 'Upload' }
+    { title: '投稿上传', path: '/upload', icon: 'Upload' },
+    { title: '我的素材', path: '/me/materials', icon: 'Picture' }
   ]},
   { label: '数据', items: [
     { title: '数据看板', path: '/me/dashboard', icon: 'DataLine' }
@@ -83,7 +84,8 @@ const adminMenu = [
   { label: '用户', items: [
     { title: '开发者申请', path: '/admin/developers', icon: 'UserFilled' },
     { title: '找回申请', path: '/admin/password-resets', icon: 'Key' },
-    { title: '账号管理', path: '/admin/users', icon: 'User' }
+    { title: '账号管理', path: '/admin/users', icon: 'User' },
+    { title: 'Bug 反馈', path: '/admin/bug-feedback', icon: 'ChatDotSquare' }
   ]},
   { label: '平台', items: [
     { title: '平台统计', path: '/admin/stats', icon: 'DataLine' }

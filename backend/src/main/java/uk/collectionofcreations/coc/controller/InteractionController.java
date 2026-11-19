@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import uk.collectionofcreations.coc.common.ApiResponse;
+import uk.collectionofcreations.coc.service.BugFeedbackService;
 import uk.collectionofcreations.coc.service.CommentService;
 import uk.collectionofcreations.coc.service.InteractionService;
 import uk.collectionofcreations.coc.service.ReportService;
@@ -23,12 +24,14 @@ public class InteractionController {
     private final CommentService commentService;
     private final InteractionService interactionService;
     private final ReportService reportService;
+    private final BugFeedbackService bugFeedbackService;
 
     public InteractionController(CommentService commentService, InteractionService interactionService,
-                                 ReportService reportService) {
+                                 ReportService reportService, BugFeedbackService bugFeedbackService) {
         this.commentService = commentService;
         this.interactionService = interactionService;
         this.reportService = reportService;
+        this.bugFeedbackService = bugFeedbackService;
     }
 
     // ---- 评论 ----
@@ -77,5 +80,12 @@ public class InteractionController {
     @PostMapping("/reports/me/read")
     public ApiResponse<Map<String, Object>> markReportsRead() {
         return ApiResponse.ok(reportService.markRead());
+    }
+
+    // ---- Bug 反馈 ----
+
+    @PostMapping("/bug-feedback")
+    public ApiResponse<Map<String, Object>> submitBugFeedback(@RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(bugFeedbackService.create(body));
     }
 }
