@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-15 22:25（GMT+8）· 发布 v2.0.3（手机端输入框修复），见第十章
+> 最近更新：2026-11-19 10:50（GMT+8）· 发布 v2.0.4（手机/电脑视图切换 + 全屏横屏），见第十一章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -22,7 +22,7 @@
 | 数据库 | `coc_platform`，**27 张表**，Flyway `V1__init.sql` + `V2__password_reset_reject.sql` |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.3 / versionCode 13**（2026-11-15 22:19 发布） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.4 / versionCode 14**（2026-11-19 10:36 打包） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -42,9 +42,9 @@ E:\Project Files\COC_rebuild
 
 ### 版本控制状态（务必先看）
 
-- 分支：`main`，HEAD `d3caa3e`（11-12 提交，说明「提交 11-04 之后积压的工作区改动」）
-- 远程已同步（`git rev-list --count @{u}..HEAD` = 0），**但不代表代码是最新**：11-12 之后又改了 27 个已跟踪文件 + 新增 `docs/`，全部未提交
-- ⚠️ 用户指示（11-15）：**先不提交**，等 App 2.0.3 实测通过后再统一整理提交
+- 分支：`main`，HEAD `ba2e3dd`（11-15 已推送，`d3caa3e..ba2e3dd`），工作区干净
+- 2.0.3 的改动已入库，拆成 3 个提交：`b254420` 账号注销接口 / `0947806` 手机端输入框修复 / `ba2e3dd` 文档更新
+- ⚠️ 2.0.4 的改动（`ProjectDetail.vue` 视图切换 + 全屏横屏 + 版本号）**尚未提交**，等实测通过后再入库
 - 未提交改动（11-15 22:20 现状，`git status --porcelain` 共 28 行）：
 
   ```
@@ -250,14 +250,15 @@ E:\Project Files\COC_rebuild
   | 2.0 | **11** ⚠️ 回退 | 11-15 |
   | 2.0.1 | 12 | 11-15 |
   | 2.0.2 | 12（与 2.0.1 相同）⚠️ | 11-15 |
-  | **2.0.3** | **13** | 11-15 22:19（输入框修复） |
+  | 2.0.3 | 13 | 11-15 22:19（输入框修复） |
+  | **2.0.4** | **14** | 11-19 10:36（视图切换 + 全屏横屏） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 已按此规则执行：code 13（2.0.2 是 12），从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 已按此规则执行：code 13 / 14，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -305,10 +306,12 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/latest`
-- 本地 `apk-build\dist\`：v1.0 → v2.0.3 共 21 个历史包（含 `coc-app-v2.0.3-20261115-2219.apk` = 最新）
-- 当前线上 `coc-app-2.0.3.apk` = `coc-app-latest.apk` = **3,853,343 B**（2.0.3 / code 13，签名 `CN=Collection of Creations`）
-- 本地自测下载正常：`http://127.0.0.1:8084/downloads/coc-app-latest.apk` → 200 / 3,853,343 B（对外走 Cloudflare 仍需按 5.4 验字节数）
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/latest`
+- 本地 `apk-build\dist\`：v1.0 → v2.0.4 共 22 个历史包（含 `coc-app-v2.0.4-20261119-1036.apk` = 最新）
+- 当前线上 `coc-app-2.0.4.apk` = `coc-app-latest.apk` = **3,855,581 B**（2.0.4 / code 14，签名 `CN=Collection of Creations`）
+- sha256 `2dfd518fca0f7cd16a507542bc58e9a3bc679add33439cfde2ab095d51e2f843`（公网实下一致）
+- 本地自测下载正常：`http://127.0.0.1:8084/downloads/coc-app-latest.apk` → 200 / 3,855,581 B（对外走 Cloudflare 仍需按 5.4 验字节数）
+- `version.json` / `version.txt` 已同步为 2.0.4 / 14（`updatedAt` 2026-11-19 10:36）
 
 ---
 
@@ -383,6 +386,7 @@ Get-Content E:\programs\nginx\logs\access.log -Tail 3000 | Where-Object { $_ -ma
 - 前端入口：`frontend/src/main.js`、`router/index.js`、`api/http.js`、`views/Upload.vue`
 - 后端入口：`backend/src/main/java/uk/collectionofcreations/coc/`（controller / service / auth / mapper）
 - 契约：`contract/api-mvp.md`
+- 开发日志：`devlog.md`（仓库根）——按「期」倒序记录每次优化改动：改动目的、涉及文件与关键行号，供后续开发、交接与版本回归时快速回溯；新记录追加在文件最前面
 - 端口约定：`ops/README-ports.md`
 - 运维脚本：`E:\Server Data\scripts\svc.cmd`、`build-coc-apk.ps1`；手册 `E:\Server Data\scripts\OPS-README.md`
 - 服务定义：`E:\Server Data\services\coc-backend\coc-backend-svc.xml`、`coc-packer\coc-packer-svc.xml`
@@ -454,3 +458,67 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "E:\Server Data\scripts\buil
 4. 从 2.0.1/2.0.2 覆盖安装是否被拦（versionCode 13 > 12，理论上通过）
 
 ---
+
+## 十一、v2.0.4 记录（2026-11-19 10:36）· 手机/电脑视图切换 + 全屏横屏
+
+### 11.1 需求（Tinker 11-19）
+
+1. **不要**把手机端 App 里 HTML 作品的展示格式强行改成电脑端；默认按手机端格式访问。
+2. 在「展开详情」（下拉详情区）里可自主选择是否以电脑端格式展示。
+3. 手机端进全屏后**自动横屏**，并提供**左右旋转**按钮。
+4. 全屏时**侧栏默认隐藏**，点击后展示，且**不影响作品主内容**的显示。
+
+### 11.2 改法（全部在 `frontend/src/views/ProjectDetail.vue`）
+
+- 新增「舞台」概念：`.viewer-body > .stage` 是作品画面的**虚拟视口**，缩放与旋转都作用在它身上，
+  iframe 内部完全不改写（`sandbox="allow-scripts"` 不变）。
+- **默认手机版**：`viewMode` 默认 `mobile`，iframe 直接铺满舞台（手机宽度）。
+  原来的 `needScale`（窄屏一律按 1280×720 缩放）改为 `desktopSim`，只在「窄屏 + HTML + 选了电脑版」时成立。
+- **详情页切换**：`展开详情` 里新增 `.view-mode-row`（手机版 / 电脑版 分段按钮），
+  选择写入 `localStorage['coc_run_view']`，同设备下次沿用；顶栏显示当前视图小标。
+- **全屏自动横屏**：`toggleFull` 先 `requestFullscreen()` 再 `screen.orientation.lock('landscape')`。
+  - 原生锁定生效 → 手机物理横屏，`rot=0`（不能再叠加 CSS 旋转，否则转两次）。
+  - 锁不上（WebView 限制 / 桌面浏览器）→ 兜底 CSS 旋转 `rot=90`，画面仍是横的。
+- **左右旋转**：`rotateView(±1)`。原生锁生效时切 `landscape-primary/secondary`，否则切 CSS `90°/270°`。
+  旋转时舞台宽高互换（`translate(w,0) rotate(90)` / `translate(0,h) rotate(270)`），iframe 得到真正的横向视口。
+- **可收起侧栏**：全屏右边缘一个 26px 把手（`.rail-tab`），点开是 `position:absolute` 浮层（`.rail`），
+  内含 重载 / 左旋 / 右旋 / 手机版⇄电脑版 / 新窗口 / 退出。浮层不参与布局，**打开前后舞台尺寸不变**（已验证 796×390 → 796×390）。
+- 退出全屏（按钮 / ESC / 返回手势）统一走 `exitFull()`：还原旋转、`orientation.unlock()`、`exitFullscreen()`。
+- 手机端 `.viewer` 改为**不吸顶**（`@media max-width:767px { position: static }`）：
+  默认手机版后画面占比变小，吸顶只会盖住下面的信息与按钮。
+
+### 11.3 两个踩过的坑（改这里务必注意）
+
+1. **grid 子项 `min-width:auto`**：电脑版舞台初始 1280px 会把 `.main-col` 撑宽，`updateScale` 再量宽度就永远是 1280 → 缩放恒为 1。
+   已改为 `.detail-grid{grid-template-columns:minmax(0,1fr) 320px}` + `.main-col{min-width:0}`，且 `frameScale` 初值给 0.3（不是 1）。
+2. **`isNarrow` 不能只看宽度**：横屏手机 `innerWidth` 会到 800+，会被误判成桌面端。
+   已改为 `UA_MOBILE || innerWidth < 768`。
+
+### 11.4 验证（无头 Edge + CDP，脚本 `E:/Server Data\tmp\coc-verify\verify204.cjs`）
+
+| 场景 | 结果 |
+| --- | --- |
+| 手机 390×844 默认进详情 | iframe 视口 **356×267**（设备宽度，无缩放），顶栏显示「手机版」 |
+| 展开详情 → 电脑版 | 舞台 356×200，iframe 内视口 **1280×720**，等比缩放 |
+| 切回手机版 | 恢复 356×267 |
+| 点全屏 | 舞台 796×390（横），`matrix(0,1,−1,0,390,0)` = 旋转 90°，iframe 视口 796×390 |
+| 打开控制侧栏 | 侧栏位移 64px → 0，**舞台仍 796×390**（不挤压内容） |
+| 左旋 | 矩阵变为 270°，画面仍铺满 |
+| 退出全屏 | 回到 356×267，`transform: none`，无残留 |
+| 桌面 1280×900 | 舞台 876×522 正常铺满，无缩放、无切换按钮、无报错 |
+| 控制台 | 0 error / 0 pageerror |
+
+### 11.5 发布
+
+- `versionName 2.0.4` / `versionCode 14`；`APP_BUILD='v2.0.4'`、`APK_RELEASE='2.0.4'` 同步
+- APK：`apk-build\dist\coc-app-v2.0.4-20261119-1036.apk`（3,855,581 B）
+- 线上：`downloads\coc-app-2.0.4.apk` = `coc-app-latest.apk`；`version.json` 已更新
+- 构建注意：本机沙箱拦 `npm run build` 清空 dist，用 `npx vite build --outDir dist.nX` 再覆盖（见 10.5）
+
+### 11.6 待实测点
+
+1. 真机装 2.0.4，进作品详情：默认是不是**手机版**（作品自己适配手机，而不是缩小的电脑版）
+2. 展开详情切「电脑版」：是否变成完整分栏布局且无横向滚动
+3. 点全屏：手机是否**自动转到横屏**（原生锁定）；没转的话画面是否已横向铺满（CSS 兜底）
+4. 全屏右边缘把手 → 点开侧栏 → 左旋/右旋 → 侧栏是否遮住画面但不缩放作品
+5. 覆盖安装 2.0.3 → 2.0.4 是否被拦（code 14 > 13，理论上通过）

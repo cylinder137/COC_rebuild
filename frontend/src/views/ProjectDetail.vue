@@ -25,56 +25,87 @@
             <!-- ============ 左主区 ============ -->
             <div class="main-col">
               <!-- 沙箱预览容器 -->
-              <div class="viewer" :class="{ fullscreen: isFull }">
+              <div ref="viewerRef" class="viewer" :class="{ fullscreen: isFull }">
                 <div class="viewer-bar">
                   <span class="type-pill" :style="pillStyle">{{ typeLabel }}</span>
                   <span class="ellipsis grow dim sm">{{ detail.title }}</span>
-                  <el-tooltip content="重新加载" placement="bottom">
-                    <button class="vbtn" @click="reloadFrame"><el-icon><Refresh /></el-icon></button>
-                  </el-tooltip>
-                  <el-tooltip :content="isFull ? '退出全屏 (Esc)' : '全屏运行'" placement="bottom">
-                    <button v-if="!isFull" class="vbtn" @click="toggleFull">
-                      <el-icon><FullScreen /></el-icon>
-                    </button>
-                  </el-tooltip>
-                  <el-tooltip content="新窗口打开" placement="bottom">
-                    <button class="vbtn" @click="openNew"><el-icon><TopRight /></el-icon></button>
-                  </el-tooltip>
+                  <!-- 全屏时顶栏只留「退出」：其余控制项收进右侧栏，避免占掉作品画面 -->
+                  <template v-if="!isFull">
+                    <span v-if="canSwitchView" class="view-pill xs">{{ viewMode === 'desktop' ? '电脑版' : '手机版' }}</span>
+                    <el-tooltip content="重新加载" placement="bottom">
+                      <button class="vbtn" @click="reloadFrame"><el-icon><Refresh /></el-icon></button>
+                    </el-tooltip>
+                    <el-tooltip content="全屏运行（自动横屏）" placement="bottom">
+                      <button class="vbtn" @click="toggleFull"><el-icon><FullScreen /></el-icon></button>
+                    </el-tooltip>
+                    <el-tooltip content="新窗口打开" placement="bottom">
+                      <button class="vbtn" @click="openNew"><el-icon><TopRight /></el-icon></button>
+                    </el-tooltip>
+                  </template>
                   <!-- 全屏退出：单独放大按钮，手机端顶栏容易被刘海/手势条挡住 -->
-                  <button v-if="isFull" class="vbtn vbtn-exit" @click="toggleFull">
-                    <el-icon><Close /></el-icon><span>退出全屏</span>
+                  <button v-else class="vbtn vbtn-exit" @click="toggleFull">
+                    <el-icon><Close /></el-icon><span>退出</span>
                   </button>
                 </div>
 
-                <div ref="bodyRef" class="viewer-body" :class="{ 'is-scaled': needScale }">
-                  <!-- 审核中 / 下架 / 结构类型：不给 iframe -->
-                  <div v-if="!canRun" class="viewer-fallback">
-                    <el-icon :size="38" class="dim"><component :is="fallbackIcon" /></el-icon>
-                    <div class="fb-title">{{ fallbackTitle }}</div>
-                    <div class="fb-desc xs dim">{{ fallbackDesc }}</div>
-                  </div>
-                  <div v-else-if="needScale" class="frame-scale-holder" :style="holderStyle">
+                <div ref="bodyRef" class="viewer-body" :class="{ 'is-scaled': desktopSim && !isFull }">
+                  <!-- stage = 作品画面的"虚拟视口"：旋转/缩放都作用在它上面，不改 iframe 内部 -->
+                  <div class="stage" :style="stageStyle">
+                    <!-- 审核中 / 下架 / 结构类型：不给 iframe -->
+                    <div v-if="!canRun" class="viewer-fallback">
+                      <el-icon :size="38" class="dim"><component :is="fallbackIcon" /></el-icon>
+                      <div class="fb-title">{{ fallbackTitle }}</div>
+                      <div class="fb-desc xs dim">{{ fallbackDesc }}</div>
+                    </div>
+                    <!-- 电脑版：固定 1280×720 渲染后等比缩放（只在手机端出现） -->
+                    <div v-else-if="desktopSim" class="frame-scale-holder" :style="holderStyle">
+                      <iframe
+                        :key="frameKey"
+                        :src="runUrl"
+                        class="frame frame-base"
+                        :style="frameStyle"
+                        sandbox="allow-scripts"
+                        referrerpolicy="no-referrer"
+                        :title="`项目预览：${detail.title}`"
+                      />
+                      <span class="scale-hint xs">电脑版 1280×720 · 等比缩放</span>
+                    </div>
+                    <!-- 手机版：直接按舞台尺寸渲染，作品自己适配（默认） -->
                     <iframe
+                      v-else
                       :key="frameKey"
                       :src="runUrl"
-                      class="frame frame-base"
-                      :style="frameStyle"
+                      class="frame"
                       sandbox="allow-scripts"
                       referrerpolicy="no-referrer"
                       :title="`项目预览：${detail.title}`"
                     />
-                    <span class="scale-hint xs">电脑端 1280×720 渲染 · 等比缩放</span>
                   </div>
-                  <iframe
-                    v-else
-                    :key="frameKey"
-                    :src="runUrl"
-                    class="frame"
-                    sandbox="allow-scripts"
-                    referrerpolicy="no-referrer"
-                    :title="`项目预览：${detail.title}`"
-                  />
                 </div>
+
+                <!-- 全屏控制侧栏：默认收起，右边缘留把手；展开为浮层，不挤压作品画面 -->
+                <template v-if="isFull">
+                  <button
+                    class="rail-tab"
+                    :class="{ open: railOpen }"
+                    :aria-label="railOpen ? '收起控制栏' : '展开控制栏'"
+                    :aria-expanded="railOpen"
+                    @click="railOpen = !railOpen"
+                  >
+                    <el-icon><component :is="railOpen ? 'ArrowRight' : 'Operation'" /></el-icon>
+                  </button>
+                  <aside class="rail" :class="{ open: railOpen }">
+                    <button class="rail-btn" @click="reloadFrame"><el-icon><Refresh /></el-icon><span>重载</span></button>
+                    <button class="rail-btn" @click="rotateView(-1)"><el-icon><RefreshLeft /></el-icon><span>左旋</span></button>
+                    <button class="rail-btn" @click="rotateView(1)"><el-icon><RefreshRight /></el-icon><span>右旋</span></button>
+                    <button v-if="canSwitchView" class="rail-btn" @click="toggleViewMode">
+                      <el-icon><component :is="viewMode === 'desktop' ? 'Cellphone' : 'Monitor'" /></el-icon>
+                      <span>{{ viewMode === 'desktop' ? '手机版' : '电脑版' }}</span>
+                    </button>
+                    <button class="rail-btn" @click="openNew"><el-icon><TopRight /></el-icon><span>新窗口</span></button>
+                    <button class="rail-btn is-primary" @click="toggleFull"><el-icon><Close /></el-icon><span>退出</span></button>
+                  </aside>
+                </template>
               </div>
 
               <!-- 标题 / 元信息 / 操作 -->
@@ -117,6 +148,22 @@
                     <el-button text @click="copyLink">
                       <el-icon><Link /></el-icon>&nbsp;复制链接
                     </el-button>
+                  </div>
+
+                  <!-- 运行视图：默认手机版（作品按设备宽度自适应），需要看作者原版分栏时切电脑版 -->
+                  <div v-if="canSwitchView" class="view-mode-row">
+                    <span class="sm">运行视图</span>
+                    <div class="seg" role="group" aria-label="运行视图">
+                      <button :class="{ on: viewMode === 'mobile' }" :aria-pressed="viewMode === 'mobile'" @click="setViewMode('mobile')">
+                        <el-icon><Cellphone /></el-icon>手机版
+                      </button>
+                      <button :class="{ on: viewMode === 'desktop' }" :aria-pressed="viewMode === 'desktop'" @click="setViewMode('desktop')">
+                        <el-icon><Monitor /></el-icon>电脑版
+                      </button>
+                    </div>
+                    <span class="xs dim">
+                      {{ viewMode === 'desktop' ? '按 1280×720 渲染后等比缩放，保留作者电脑端布局' : '按本机宽度渲染，作品自适应手机（默认）' }}
+                    </span>
                   </div>
                   <div class="run-note xs dim">
                     沙箱隔离运行（sandbox="allow-scripts"，未授予 allow-same-origin，页面无法读取站点 cookie）
@@ -363,18 +410,73 @@ const canRun = computed(() => {
   if (d.status !== 2) return false
   return ['html', 'scratch'].includes(d.project_type)
 })
-/* ---------------- P1：手机端 HTML 预览按电脑端布局渲染后整体缩放 ----------------
-   手机上直接给 iframe 一个窄视口，HTML 作品会按手机断点重排（甚至挤成单列）。
-   这里固定 1280×720 渲染（等于电脑端视口），再用 transform: scale() 等比缩到容器宽度，
-   既保留作者的原始布局，又不会出现横向滚动条。仅对 html 类型生效。 */
+/* ---------------- 运行视图：手机版（默认）/ 电脑版 ----------------
+   手机端不再强行按电脑布局渲染：默认给 iframe 设备宽度，让作品自己走手机断点，
+   这才是"在手机上打开"的正常样子。需要看作者原定的电脑端分栏时，在「展开详情」
+   里切到电脑版 —— 那时才固定 1280×720 渲染再等比缩放，避免横向滚动条。
+   选择记在 localStorage，同一台设备下次进来沿用。 */
 const BASE_W = 1280
 const BASE_H = 720
+const RUN_VIEW_KEY = 'coc_run_view'
 const bodyRef = ref(null)
-const frameScale = ref(1)
-const isNarrow = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
+const viewerRef = ref(null)
+/* 初值给个小的：1 会让电脑版首帧按 1280 铺出去，撑宽容器后比例算不回来 */
+const frameScale = ref(0.3)
+/* 是否按"手机视角"处理：横屏手机的 innerWidth 会到 800+，只看宽度会把横屏误判成桌面端 */
+const UA_MOBILE = typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod|Mobile|HarmonyOS|OpenHarmony/i.test(navigator.userAgent)
+const isNarrow = ref(UA_MOBILE || (typeof window !== 'undefined' && window.innerWidth < 768))
+const viewMode = ref((() => {
+  try { return localStorage.getItem(RUN_VIEW_KEY) === 'desktop' ? 'desktop' : 'mobile' } catch (e) { return 'mobile' }
+})())
+/** 全屏画面的旋转角：0=不旋转，90/270=CSS 模拟横屏（原生方向锁定不可用时的兜底） */
+const rot = ref(0)
+/** 全屏右侧控制栏是否展开（默认收起，只有把手可见） */
+const railOpen = ref(false)
+/** 原生 screen.orientation.lock 是否生效：生效时画面已物理横屏，不能再叠加 CSS 旋转 */
+const nativeLandscape = ref(false)
 let scaleRO = null
-const needScale = computed(() => canRun.value && isNarrow.value && detail.value?.project_type === 'html')
-const holderStyle = computed(() => ({ height: `${Math.round(BASE_H * frameScale.value)}px` }))
+
+const isHtml = computed(() => detail.value?.project_type === 'html')
+/** 只有窄屏 + HTML + 可运行，才需要「手机版/电脑版」这个选择 */
+const canSwitchView = computed(() => isHtml.value && isNarrow.value && canRun.value)
+/** 电脑版模拟：只在手机端把 1280×720 缩放塞进窄屏 */
+const desktopSim = computed(() => canRun.value && isHtml.value && isNarrow.value && viewMode.value === 'desktop')
+
+/** 舞台的"虚拟视口"：旋转后宽高互换，iframe 得到的仍是横向视口。
+    box 用 ref 存（而不是每次读 DOM），旋转/缩放/尺寸变化都能触发重算。 */
+const box = ref({ w: 0, h: 0 })
+const stageBox = computed(() => {
+  const { w, h } = box.value
+  const r = rot.value
+  return { w, h, vw: r ? h : w, vh: r ? w : h }
+})
+const stageStyle = computed(() => {
+  const { w, h, vw, vh } = stageBox.value
+  if (rot.value === 90) {
+    return {
+      position: 'absolute', left: '0', top: '0',
+      width: `${vw}px`, height: `${vh}px`,
+      transform: `translate(${w}px, 0) rotate(90deg)`, transformOrigin: 'top left'
+    }
+  }
+  if (rot.value === 270) {
+    return {
+      position: 'absolute', left: '0', top: '0',
+      width: `${vw}px`, height: `${vh}px`,
+      transform: `translate(0, ${h}px) rotate(270deg)`, transformOrigin: 'top left'
+    }
+  }
+  // 非全屏的电脑版：由舞台高度撑开页面（不再用 padding-top 撑比例）
+  if (desktopSim.value && !isFull.value) {
+    return { position: 'relative', width: '100%', height: `${Math.round(BASE_H * frameScale.value)}px` }
+  }
+  return { position: 'absolute', inset: '0', width: '100%', height: '100%' }
+})
+const holderStyle = computed(() => ({
+  width: `${Math.round(BASE_W * frameScale.value)}px`,
+  height: `${Math.round(BASE_H * frameScale.value)}px`
+}))
 const frameStyle = computed(() => ({
   width: `${BASE_W}px`,
   height: `${BASE_H}px`,
@@ -385,16 +487,36 @@ function updateScale() {
   const el = bodyRef.value
   if (!el) return
   const w = el.clientWidth || 0
-  if (!w) return
-  let s = w / BASE_W
   const h = el.clientHeight || 0
-  if (isFull.value && h > 0) s = Math.min(s, h / BASE_H)
+  if (!w) return
+  if (box.value.w !== w || box.value.h !== h) box.value = { w, h }
+  let s
+  if (isFull.value) {
+    // 全屏：横竖都要装得下（旋转时宽高互换）
+    const vw = rot.value ? h : w
+    const vh = rot.value ? w : h
+    s = Math.min(vw / BASE_W, vh / BASE_H, 1)
+  } else {
+    s = w / BASE_W
+  }
   frameScale.value = Math.max(0.2, Math.min(s, 2))
 }
 function syncNarrow() {
-  isNarrow.value = window.innerWidth < 768
+  isNarrow.value = UA_MOBILE || window.innerWidth < 768
+  if (!isNarrow.value) {
+    // 回到宽屏：清理手机端的临时状态，避免下次进详情页还是歪的
+    rot.value = 0
+    railOpen.value = false
+  }
   nextTick(updateScale)
 }
+function setViewMode(mode) {
+  if (viewMode.value === mode) return
+  viewMode.value = mode
+  try { localStorage.setItem(RUN_VIEW_KEY, mode) } catch (e) { /* 隐私模式忽略 */ }
+  nextTick(updateScale)
+}
+function toggleViewMode() { setViewMode(viewMode.value === 'desktop' ? 'mobile' : 'desktop') }
 
 const fallbackIcon = computed(() => {  const s = detail.value?.status
   if (s === 3) return 'CircleCloseFilled'
@@ -675,7 +797,76 @@ async function onRemoveComment(c) {
 
 /* ---------------- 预览交互 ---------------- */
 function reloadFrame() { frameKey.value += 1; ElMessage.success('已重新加载') }
-function toggleFull() { isFull.value = !isFull.value }
+
+/* 全屏：手机端进全屏就自动横屏。
+   优先用原生 screen.orientation.lock（手机物理转过去，最自然），
+   拿不到（不发全屏、WebView 限制、桌面浏览器）就退回 CSS 旋转，保证画面一定是横的。 */
+async function toggleFull() {
+  if (isFull.value) { await exitFull(); return }
+  isFull.value = true
+  railOpen.value = false
+  await nextTick()
+  updateScale()
+  if (!isNarrow.value) return
+  try { await viewerRef.value?.requestFullscreen?.({ navigationUI: 'hide' }) } catch (e) { /* 不支持就算了 */ }
+  const ok = await lockNative('landscape')
+  if (!ok) {
+    // 兜底：CSS 旋转到右横屏
+    nativeLandscape.value = false
+    rot.value = 90
+  }
+  await nextTick()
+  updateScale()
+}
+
+async function lockNative(orient) {
+  const so = typeof screen !== 'undefined' ? screen.orientation : null
+  if (!so || typeof so.lock !== 'function') return false
+  try {
+    await so.lock(orient)
+    nativeLandscape.value = true
+    rot.value = 0
+    return true
+  } catch (e) {
+    nativeLandscape.value = false
+    return false
+  }
+}
+
+async function exitFull() {
+  isFull.value = false
+  railOpen.value = false
+  rot.value = 0
+  nativeLandscape.value = false
+  try { screen.orientation?.unlock?.() } catch (e) { /* 桌面浏览器无此 API */ }
+  try { if (document.fullscreenElement) await document.exitFullscreen() } catch (e) { /* ignore */ }
+  nextTick(updateScale)
+}
+
+/** 左旋 / 右旋：原生锁定生效时切 landscape-primary/secondary，否则切 CSS 旋转角 */
+async function rotateView(dir) {
+  if (!isFull.value) return
+  if (nativeLandscape.value) {
+    const ok = await lockNative(dir > 0 ? 'landscape-primary' : 'landscape-secondary')
+    if (ok) { nextTick(updateScale); return }
+  }
+  rot.value = dir > 0 ? 90 : 270
+  railOpen.value = false
+  nextTick(updateScale)
+}
+
+/** 系统侧退出全屏（返回手势/ESC/F11）时同步状态，别让页面卡在 fixed 遮罩里 */
+function onFullscreenChange() {
+  if (!document.fullscreenElement && isFull.value) {
+    isFull.value = false
+    railOpen.value = false
+    rot.value = 0
+    nativeLandscape.value = false
+    try { screen.orientation?.unlock?.() } catch (e) { /* ignore */ }
+    nextTick(updateScale)
+  }
+}
+
 function openNew() {
   if (!runUrl.value) { ElMessage.warning('运行地址尚未就绪'); return }
   window.open(runUrl.value, '_blank', 'noopener')
@@ -687,17 +878,20 @@ function copyLink() {
   )
 }
 function onKey(e) {
-  if (e.key === 'Escape' && isFull.value) isFull.value = false
+  if (e.key !== 'Escape') return
+  if (railOpen.value) { railOpen.value = false; return }
+  if (isFull.value) exitFull()
 }
 watch(isFull, (v) => {
   document.body.style.overflow = v ? 'hidden' : ''
   nextTick(updateScale)
 })
-watch(needScale, () => nextTick(updateScale))
+watch([desktopSim, rot], () => nextTick(updateScale))
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   window.addEventListener('resize', syncNarrow, { passive: true })
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   syncNarrow()
   if (bodyRef.value && typeof ResizeObserver !== 'undefined') {
     scaleRO = new ResizeObserver(() => updateScale())
@@ -710,9 +904,12 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('resize', syncNarrow)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   scaleRO?.disconnect()
   scaleRO = null
   document.body.style.overflow = ''
+  try { screen.orientation?.unlock?.() } catch (e) { /* ignore */ }
+  try { if (document.fullscreenElement) document.exitFullscreen() } catch (e) { /* ignore */ }
 })
 </script>
 
@@ -725,7 +922,10 @@ onUnmounted(() => {
 .status-band.warn { background: rgba(245, 158, 11, .12); color: var(--c-warning); border: 1px solid rgba(245, 158, 11, .3); }
 .status-band.danger { background: rgba(239, 68, 68, .12); color: var(--c-danger); border: 1px solid rgba(239, 68, 68, .3); }
 
-.detail-grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+/* grid 子项默认 min-width:auto，里面放 1280px 的舞台会把整列撑宽 → 缩放比例恒为 1。
+   显式归零，舞台只能被容器约束。 */
+.main-col { min-width: 0; }
 
 .viewer {
   position: sticky; top: calc(var(--h-header) + 12px); z-index: 6;
@@ -741,10 +941,15 @@ onUnmounted(() => {
   background: var(--c-bg-card); border-bottom: 1px solid var(--c-border);
 }
 .viewer.fullscreen .viewer-bar { height: 48px; padding-top: env(safe-area-inset-top, 0px); }
-.viewer-body { position: relative; padding-top: min(62.5%, 58vh); }
-/* 手机端缩放模式：高度由内联 style 按 scale 给出，不再用 padding-top 撑 */
-.viewer-body.is-scaled { padding-top: 0; background: #fff; overflow: hidden; }
-.frame-scale-holder { position: relative; width: 100%; overflow: hidden; }
+.viewer-body { position: relative; padding-top: min(62.5%, 58vh); overflow: hidden; }
+/* 手机端电脑版：高度由内联 style 按 scale 给出，不再用 padding-top 撑 */
+.viewer-body.is-scaled { padding-top: 0; background: #fff; }
+/* 舞台：作品画面的虚拟视口。旋转/缩放都作用在它身上，iframe 内部不做任何改写 */
+.stage {
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; overflow: hidden;
+}
+.frame-scale-holder { position: relative; overflow: hidden; flex: 0 0 auto; }
 .frame-base { left: 0; top: 0; }
 .scale-hint {
   position: absolute; right: 8px; bottom: 6px; padding: 1px 8px;
@@ -776,6 +981,59 @@ onUnmounted(() => {
 .detail-extra { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--c-border); }
 .run-note { margin-top: 12px; line-height: 1.7; }
 .viewer.fullscreen .vbtn-exit { height: 38px; }
+
+/* 顶栏里的「当前视图」小标 */
+.view-pill {
+  padding: 1px 8px; border-radius: var(--r-pill); white-space: nowrap;
+  border: 1px solid var(--c-border); background: var(--c-bg-sunken); color: var(--c-text-3);
+}
+
+/* 全屏右侧控制栏：默认收起，只在右边缘露一个把手；展开是浮层，不挤压画面 */
+.rail-tab {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 5; width: 26px; height: 68px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255, 255, 255, .18); border-right: 0;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  background: rgba(18, 18, 22, .72); color: #fff; cursor: pointer;
+  opacity: .5; transition: opacity var(--dur-fast) var(--ease-out), right var(--dur-fast) var(--ease-out);
+}
+.rail-tab:hover, .rail-tab.open { opacity: 1; }
+.rail-tab.open { right: 70px; }
+.rail {
+  position: absolute; right: 0; top: 50%;
+  transform: translate(100%, -50%); z-index: 6;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 6px; border-radius: var(--r-md) 0 0 var(--r-md);
+  background: rgba(18, 18, 22, .9); backdrop-filter: blur(8px);
+  transition: transform var(--dur-fast) var(--ease-out);
+  padding-right: calc(6px + env(safe-area-inset-right, 0px));
+}
+.rail.open { transform: translate(0, -50%); }
+.rail-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 52px; padding: 7px 0; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: #fff; font-size: 11px; line-height: 1.2; cursor: pointer;
+}
+.rail-btn .el-icon { font-size: 17px; }
+.rail-btn:hover { background: rgba(255, 255, 255, .14); }
+.rail-btn.is-primary { background: var(--c-primary); }
+.rail-btn.is-primary:hover { background: var(--c-primary-hover); }
+
+/* 详情里的「运行视图」切换 */
+.view-mode-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 14px 0 4px; padding: 10px 12px;
+  border: 1px dashed var(--c-border); border-radius: var(--r-md); background: var(--c-bg-sunken);
+}
+.seg { display: inline-flex; border: 1px solid var(--c-border-strong); border-radius: var(--r-pill); overflow: hidden; }
+.seg button {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; padding: 0 14px; border: 0; background: transparent;
+  color: var(--c-text-2); font-size: var(--fs-sm); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.seg button.on { background: var(--c-primary); color: #fff; }
 .type-pill {
   padding: 2px 10px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 600;
   border: 1px solid transparent; flex: 0 0 auto;
@@ -825,6 +1083,8 @@ onUnmounted(() => {
   .side-col .card { min-width: 260px; }
 }
 @media (max-width: 767px) {
+  /* 手机端不做吸顶：默认手机版后画面高度占比更小，吸顶只会盖住下面的信息/按钮 */
+  .viewer { position: static; }
   .viewer-body { padding-top: min(75%, 52vh); }
   .side-col { flex-direction: column; }
 }
