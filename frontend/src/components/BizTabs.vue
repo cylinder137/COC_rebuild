@@ -56,7 +56,7 @@ const businesses = [
     tag: '主营',
     icon: 'Grid',
     color: '#4f6ef7',
-    desc: '本站。Scratch / HTML / 结构文件的创作分享社区：作品展示、开发者认证、投稿审核、数据看板。',
+    desc: '本站。Scratch / HTML / 素材的创作分享社区：作品展示、开发者认证、投稿审核、数据看板。',
     host: 'collectionofcreations.uk',
     url: '/',
     external: false

@@ -52,7 +52,7 @@
       :error="error"
       :empty="!loading && !error && !list.length"
       empty-text="还没有作品"
-      empty-desc="投稿你的第一个小造物，Scratch / 结构文件免审直发。"
+      empty-desc="投稿你的第一个小造物，Scratch 免审直发；素材可在「我的素材」上传。"
       :skeleton-count="6"
       @retry="load"
     >

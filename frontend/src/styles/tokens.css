@@ -144,8 +144,15 @@ html.is-native {
   --safe-bottom: 0px;
 }
 
-/* ---------- Element Plus 映射（深浅通用，派生自同一组变量） ---------- */
-:root {
+/* ---------- Element Plus 映射（深浅通用，派生自同一组变量） ----------
+   ⚠️ 选择器必须带上 html.dark / html[data-theme]：
+   element-plus/theme-chalk/dark/css-vars.css 用的是 `html.dark{...}`（特异性 0,1,1），
+   只写 `:root`（0,1,0）会被它压掉 —— 深色模式下 EP 组件会退回官方默认蓝 #409EFF、
+   背景退回 #141414，和站点主题完全脱节（五期测试反馈：投稿向导按钮明暗不一致的根因）。 */
+:root,
+html.dark,
+html[data-theme='dark'],
+html[data-theme='light'] {
   --el-color-primary: var(--c-primary);
   --el-color-primary-light-3: color-mix(in srgb, var(--c-primary) 78%, var(--c-bg-card));
   --el-color-primary-light-5: color-mix(in srgb, var(--c-primary) 60%, var(--c-bg-card));
@@ -163,16 +170,40 @@ html.is-native {
   --el-text-color-primary: var(--c-text-1);
   --el-text-color-regular: var(--c-text-2);
   --el-text-color-secondary: var(--c-text-3);
+  --el-text-color-placeholder: var(--c-text-3);
   --el-border-color: var(--c-border);
   --el-border-color-light: var(--c-border);
   --el-border-color-lighter: var(--c-border);
+  --el-border-color-extra-light: var(--c-border);
   --el-fill-color: var(--c-bg-sunken);
   --el-fill-color-light: var(--c-bg-hover);
+  --el-fill-color-lighter: var(--c-bg-hover);
   --el-fill-color-blank: var(--c-bg-card);
+  --el-disabled-bg-color: var(--c-bg-sunken);
+  --el-disabled-text-color: var(--c-text-3);
+  --el-disabled-border-color: var(--c-border);
   --el-border-radius-base: var(--r-md);
   --el-mask-color: color-mix(in srgb, #000 62%, transparent);
 }
 
 html[data-theme='light'] {
   --el-mask-color: rgba(23, 26, 33, 0.4);
+}
+
+/* 主按钮明确一档：深色下用 var(--c-primary) 实色 + 白字；浅色下 hover 变深而不是变浅 */
+.el-button--primary {
+  --el-button-bg-color: var(--c-primary);
+  --el-button-border-color: var(--c-primary);
+  --el-button-hover-bg-color: var(--c-primary-hover);
+  --el-button-hover-border-color: var(--c-primary-hover);
+  --el-button-active-bg-color: var(--c-primary-active);
+  --el-button-active-border-color: var(--c-primary-active);
+  --el-button-text-color: #fff;
+}
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  --el-button-disabled-bg-color: var(--el-color-primary-light-5);
+  --el-button-disabled-border-color: var(--el-color-primary-light-5);
+  --el-button-disabled-text-color: #fff;
+  opacity: 0.75;
 }

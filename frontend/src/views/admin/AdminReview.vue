@@ -3,7 +3,7 @@
     <div class="row between center wrap gap12" style="margin-bottom:20px">
       <div>
         <h2 class="section-title" style="margin:0">审核队列</h2>
-        <div class="sm dim">默认只显示需人工审核的 HTML / zip 待审项；Scratch 与结构文件免审不进队列。驳回 = 直接删除该作品及其服务器代码文件（不保留审核记录）</div>
+        <div class="sm dim">默认只显示需人工审核的 HTML / zip 待审项；Scratch 免审不进队列。驳回 = 直接删除该作品及其服务器代码文件（不保留审核记录）</div>
       </div>
       <div class="row center gap12">
         <el-checkbox v-model="showAuto" @change="load">显示免审类型</el-checkbox>

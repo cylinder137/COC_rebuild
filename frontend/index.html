@@ -17,19 +17,21 @@
         var mode = t === 'auto' ? (light ? 'light' : 'dark') : t
         root.setAttribute('data-theme', mode)
         if (mode === 'dark') root.classList.add('dark')
+        // [深色主色, 浅色主色, 强调色, 渐变收尾色]：浅色底必须用更深一档，
+        // 否则白字按钮发白发灰（与 stores/ui.js 的 ACCENTS 保持一致）
         var ACCENTS = {
-          indigo: ['#6c86ff', '#7b5cf0', '#a855f7'],
-          violet: ['#a855f7', '#8b5cf6', '#d946ef'],
-          cyan: ['#22b8cf', '#3bc9db', '#4dabf7'],
-          emerald: ['#2fbf71', '#20c997', '#12b886'],
-          amber: ['#f59f00', '#f76707', '#e8590c'],
-          rose: ['#f0506e', '#e64980', '#c2255c'],
-          slate: ['#7c8a9c', '#5c6b7a', '#4a5568']
+          indigo: ['#6c86ff', '#4f6ef7', '#7b5cf0', '#a855f7'],
+          violet: ['#a855f7', '#8b3fd9', '#8b5cf6', '#d946ef'],
+          cyan: ['#22b8cf', '#0b8fa3', '#3bc9db', '#4dabf7'],
+          emerald: ['#2fbf71', '#128a4d', '#20c997', '#12b886'],
+          amber: ['#f59f00', '#b45309', '#f76707', '#e8590c'],
+          rose: ['#f0506e', '#d92d50', '#e64980', '#c2255c'],
+          slate: ['#7c8a9c', '#5c6b7a', '#5c6b7a', '#4a5568']
         }
         var a = ACCENTS[localStorage.getItem('coc_accent')] || ACCENTS.indigo
-        root.style.setProperty('--c-primary', a[0])
-        root.style.setProperty('--c-accent', a[1])
-        root.style.setProperty('--c-accent-2', a[2])
+        root.style.setProperty('--c-primary', mode === 'light' ? a[1] : a[0])
+        root.style.setProperty('--c-accent', a[2])
+        root.style.setProperty('--c-accent-2', a[3])
       } catch (e) {}
     </script>
   </head>

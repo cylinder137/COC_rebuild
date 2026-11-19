@@ -4,6 +4,168 @@
 
 ---
 
+## 2026-11-19 · v2.1.0：手机端补齐素材库 + 修复明暗模式按钮配色（五期测试收官）
+
+> 这次不是新功能，而是**给 2.0.6 收尾**：用户实测反馈 2.0.6 的 APK 里「MC 结构还在、素材库没有」，同时投稿向导的按钮在深色模式下颜色不对。两条都修完后打包为 **2.1.0（versionCode 17）**，作为五期测试的收官版本。
+
+### 一、问题一：2.0.6 的 APK 里前端是旧的
+
+**现象**：网页端已经是素材库，但手机上装 2.0.6 打开，底栏还是「MC结构」，素材库页面根本没有。
+
+**排查过程**（不要只看代码，要看**产物**）：
+
+1. 网页端 `frontend/dist` 入口是 `assets/index-Cb1rm9_k.js`，其中已含 `Assets-*` / `MeAssets-*` 分包 —— 源码和网页构建都没问题。
+2. 直接解包线上的 `coc-app-2.0.6.apk`，看 `assets/public/index.html`：
+
+   | 检查项 | 2.0.6 APK 实际 | 应该是 |
+   | --- | --- | --- |
+   | index.html 引用 | `assets/index-CrLUMb5x.js` | `assets/index-Cb1rm9_k.js` |
+   | `Assets-*.js` / `MeAssets-*.js` | **不存在** | 存在 |
+   | `BottomTabBar-*.js` 内容 | 命中 `MC结构` | 只有 `素材` |
+
+3. 结论：**APK 里打进去的是旧前端**。继续往上找，`E:\Server Data\apk-build\coc-app\www` 的 `index.html` 引用的是 `index-CTIiWO9z.js` —— 比 `frontend/dist` 更旧。
+
+**根因**：`www/` 是 Capacitor 的 web 资源来源目录，打包前必须把最新 `dist` 同步进去。发布脚本 `E:\Server Data\scripts\build-coc-apk.ps1` 里本来有「copy dist → www」这一步，但 2.0.6 这次是没有走完整脚本（只跑了 gradle），`www` 还是上一轮的残留，于是 gradle 忠实地把旧前端打进了 APK —— Capacitor 不会自己去读 `frontend/dist`。
+
+**修复**：
+
+```bash
+# 1) 清空旧资源（www 只放静态资源，index.html + assets/*）
+cd "E:/Server Data/apk-build/coc-app/www"
+rm -f index.html assets/* && rmdir assets
+# 2) 同步最新 dist
+cp -r "E:/Project Files/COC_rebuild/frontend/dist/." .
+# 3) 同步进 android 工程（此步较慢，约 3~4 分钟）
+npx cap sync android
+# 4) 打包
+cd android && ./gradlew.bat assembleRelease --no-daemon
+```
+
+**教训（写进流程，别再来一次）**：**打包后必须解包自检**，不能只看 `BUILD SUCCESSFUL`：
+
+```bash
+unzip -l app-release.apk | grep 'assets/public/assets/'   # 看是否存在新的分包
+unzip -p app-release.apk assets/public/index.html | grep assets/index-   # 入口 hash 必须与 dist 一致
+```
+
+本次 2.1.0 解包自检结果（946 个文件里前端部分 71 个）：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `assets/public/index.html` 入口 | `assets/index-yZCrbRZ5.js` = `frontend/dist/index.html` ✅ |
+| 素材库分包 | `Assets-DYhVDBu_.js` / `Assets-IJ5nQyoH.css` / `MeAssets-B7vtCBoe.js` / `MeAssets-I9xZ0yUb.css` ✅ |
+| 底栏文案 | `BottomTabBar-Dg8HOcRJ.js` 中「素材」×1、「MC结构」×0 ✅ |
+| `mcstructure` 全量搜索 | 仅剩 `format-CA8eiKFc.js` 里的 `TYPE_LABEL.mcstructure = "MC 结构"`（历史项目类型展示，**有意保留**） ✅ |
+| 版本标记 | `index-yZCrbRZ5.js` 内含 `v2.1.0` ✅ |
+
+### 二、问题二：投稿向导按钮在明暗模式下配色错乱
+
+**现象**：项目草稿创建（投稿向导）页面的主按钮，深色模式下变成 Element Plus 官方蓝 `#409EFF`、次要按钮背景变成 `rgb(20,20,20)`/边框 `rgb(76,77,79)`，跟站点主题色（靛蓝 `#6c86ff`）和深色底（`#151923`）完全不搭；切回浅色模式又正常。
+
+**排查**：用无头浏览器在两种主题下各取 `getComputedStyle`：
+
+| | 修复前（深色） | 修复后（深色） | 修复后（浅色） |
+| --- | --- | --- | --- |
+| 主按钮背景 | `rgb(64,158,255)`（EP 默认蓝） | `rgb(108,134,255)` | `rgb(79,110,247)` |
+| 次要按钮背景 | `rgb(20,20,20)` | `rgb(21,25,35)` | — |
+| 次要按钮文字 | — | `rgb(164,172,189)` | — |
+
+**根因（很隐蔽，CSS 特异性）**：
+
+- `frontend/src/styles/tokens.css` 把项目设计变量映射到 Element Plus 变量时，选择器写的是 **`:root`（特异性 0,1,0）**；
+- 但 `element-plus/theme-chalk/dark/css-vars.css` 用的选择器是 **`html.dark { … }`（特异性 0,1,1）**；
+- 深色模式下后者的特异性更高，**整套 EP 变量被官方深色默认值覆盖**，项目自定义的 `--el-color-primary` / `--el-text-color-*` / `--el-border-color-*` 全部失效 —— 而浅色模式没有 `html.dark` 这份覆盖表，所以只有深色出问题。
+
+**修复**（三处一起改，缺一不可）：
+
+1. `frontend/src/styles/tokens.css` —— 把映射选择器写成一组，让特异性不输给 EP 的深色表，并补上按钮级变量：
+
+   ```css
+   :root,
+   html.dark,
+   html[data-theme='dark'],
+   html[data-theme='light'] {
+     --el-color-primary: var(--c-primary);
+     /* … text / border / fill / disabled 一整套 … */
+   }
+   .el-button--primary {
+     --el-button-bg-color: var(--c-primary);
+     --el-button-border-color: var(--c-primary);
+     --el-button-hover-bg-color: var(--c-primary-hover);
+     --el-button-active-bg-color: var(--c-primary-active);
+     --el-button-text-color: #fff;
+   }
+   .el-button--primary.is-disabled,
+   .el-button--primary.is-disabled:hover {
+     --el-button-disabled-bg-color: var(--el-color-primary-light-5);
+     --el-button-disabled-text-color: #fff;
+     opacity: 0.75;
+   }
+   ```
+
+2. `frontend/src/stores/ui.js` —— 浅色底上直接用 `#6c86ff` 当按钮底、白字对比度不足，给每套主题色补了一档**深色版** `primaryLight`，`apply()` 里按模式取：`mode === 'light' ? a.primaryLight : a.primary`。
+
+3. `frontend/index.html` —— 首屏内联脚本里的 `ACCENTS` 表同步改成 4 元组 `[深色主色, 浅色主色, accent, accent2]`，保证**首帧**（Vue 挂载前）的颜色和 store 算出的一致，不会闪一下。
+
+### 三、顺带清理：已下线板块的残留文案
+
+素材库上线后，界面上还有几处写着「结构文件」，会误导用户。全部改为「素材」：
+
+| 文件 | 改动 |
+| --- | --- |
+| `components/BizTabs.vue` | 分类说明 `Scratch / HTML / 结构文件…` → `Scratch / HTML / 素材…` |
+| `views/DevApply.vue` | 头部说明改为「投稿自己的作品（HTML / Scratch）… 图片、音视频等素材请传到「我的素材」」；条款 3 改为「Scratch 为纯数据/平台打包产物，免审直发」 |
+| `views/MeProjects.vue` | 空状态描述 → 「投稿你的第一个小造物，Scratch 免审直发；素材可在「我的素材」上传」 |
+| `views/admin/AdminReview.vue` | 「Scratch 与结构文件免审不进队列」→「Scratch 免审不进队列」 |
+
+**有意保留**：`utils/format.js` 的 `TYPE_LABEL` 仍留 `structure` / `mcstructure` 两个键，`ProjectDetail.vue` 也仍留「板块已下线」兜底 —— 历史项目的类型标签要能正常显示，不能显示成空或 undefined。
+
+### 四、涉及文件一览
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/styles/tokens.css` | 修 EP 变量映射的选择器特异性（本次核心修复）+ 主按钮/禁用态显式规则 |
+| `frontend/src/stores/ui.js` | `ACCENTS` 增加 `primaryLight`，`apply()` 按明暗模式取主色 |
+| `frontend/index.html` | 首屏主题脚本的色板表同步为 4 元组 |
+| `frontend/src/views/Downloads.vue` | 新增 2.1.0 条目（体积 3,886,681 B 兜底值；线上以 `version.json` 为准） |
+| `frontend/src/utils/platform.js` | `APP_BUILD` → `'v2.1.0'` |
+| `components/BizTabs.vue`、`views/DevApply.vue`、`views/MeProjects.vue`、`views/admin/AdminReview.vue` | 下线板块残留文案清理 |
+| `E:/Server Data/apk-build/coc-app/www/` | 全量重同步（本次 APK 内容错旧的直接产出物） |
+| `E:/Server Data/apk-build/coc-app/android/app/build.gradle` | `versionCode 17` / `versionName "2.1.0"` |
+| `E:/Server Data/coc-platform/downloads/` | `coc-app-2.1.0.apk`、`coc-app-latest.apk`、`version.json`、`version.txt` |
+
+### 五、发布与验证
+
+| 项 | 值 |
+| --- | --- |
+| 包大小 | 3,886,799 B（约 3.71 MB） |
+| sha256 | `6633852f2780a6242db86702fbd625cbe1a11c1ef9fa14844f6f147052760abf` |
+| 签名 | `CN=Collection of Creations, OU=Dev, O=COC`，证书 SHA-256 `1324f12e…2958b5`（与历史包同证书，可覆盖安装） |
+| versionCode | 17（16 → 17，覆盖安装无冲突） |
+| 本地验证 | `/downloads/version.json` 返回 2.1.0；`/downloads/coc-app-2.1.0.apk` `200` / `Content-Length: 3886799` |
+| 公网验证 | `https://collectionofcreations.uk/downloads/version.json` 已是 2.1.0；APK `Content-Length: 3886799`（未命中旧缓存） |
+| 网页端 | 本地与公网入口 hash 一致：`assets/index-yZCrbRZ5.js` |
+| 内容自检 | 见上文「一、教训」表，四项全过 |
+
+### 六、清理
+
+- 删掉临时构建目录 `frontend/dist.n1`（构建产物已合并进 `dist` 并 prune 掉 36 个旧 chunk）。
+- `frontend/dist-user`（`--base=/user/` 的沙箱区构建）**本次未重建**：线上 nginx 已无任何 site 配置引用 `dist-user`，属历史遗留目录，重建不产生任何线上效果。
+- 解包校验目录 `E:/Server Data/tmp/apkchk` 用完即删。
+
+### 七、五期测试收官说明
+
+至此五期测试提出的问题全部闭环：
+
+1. 手机端草稿建不出来（输入框失效）→ 2.0.3
+2. 下载链接 404（`API_ORIGIN` 写死 `127.0.0.1:8090`）→ 2.0.3 后修
+3. 手机端默认手机版视图 + 可切电脑版 + 全屏横屏 + 控制侧栏 → 2.0.4
+4. 全屏虚拟按键（双摇杆独立映射 + 自定义按键 + 拖动 + 透明度/尺寸 + 本地持久化）→ 2.0.5
+5. mcstructure 下线、素材库与项目/素材系列上线 → 2.0.6（网页端）
+6. **手机端未同步素材库 + 投稿按钮明暗配色错乱 → 2.1.0（本次）**
+
+---
+
 ## 2026-11-19 · v2.0.6：下线 mcstructure 板块、上线「素材库」与项目/素材系列
 
 > 本次是五期测试里体量最大的一次结构调整：**新增一套素材体系全面替代原来的 MC 结构板块**，同时给项目与素材都加上「系列」这一层归类维度。网页端已重建上线，App 打包为 **2.0.6（versionCode 16）** 上架官网。

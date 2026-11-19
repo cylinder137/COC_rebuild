@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-19 16:25（GMT+8）· 发布 v2.0.6（下线 mcstructure 板块、上线素材库 + 项目/素材系列），见第十三章
+> 最近更新：2026-11-19 17:25（GMT+8）· 发布 v2.1.0（手机端补齐素材库 + 修复明暗模式按钮配色，五期测试收官），见第十四章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -15,14 +15,14 @@
 | 维度 | 现状 |
 | --- | --- |
 | 仓库根 | `E:\Project Files\COC_rebuild` |
-| 分支 | `main`，HEAD `bc3e2aa`（2026-11-19，2.0.5 已推送 `4c9acb2..bc3e2aa`）；**2.0.6 的改动 + 并行的 bug_feedback 改动均在工作区未提交** |
+| 分支 | `main`，HEAD `cce4cb7`（2026-11-19，2.0.6 已推送 `bc3e2aa..cce4cb7`）；**2.1.0 的改动在工作区未提交** |
 | 远程 | `https://github.com/cylinder137/COC_rebuild.git`（已推送，ahead=0） |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router（`createWebHistory`） |
 | 后端 | Java 21 + Spring Boot 3.5 + MyBatis + MySQL 8 + Flyway |
 | 数据库 | `coc_platform`，**31 张表**，Flyway `V1` → `V4`（`V3__bug_feedback`、`V4__assets_and_series` 已应用） |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.0.6 / versionCode 16**（2026-11-19 16:04 打包） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.1.0 / versionCode 17**（2026-11-19 17:19 打包，3,886,799 B） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -46,9 +46,10 @@ E:\Project Files\COC_rebuild
 - 2.0.3 的改动已入库，拆成 3 个提交：`b254420` 账号注销接口 / `0947806` 手机端输入框修复 / `ba2e3dd` 文档更新
 - 2.0.4 的改动已入库（`ec5e10e` 视图切换/全屏横屏 + `4c9acb2` 零散优化与 devlog），已推送 `ba2e3dd..4c9acb2`
 - 2.0.5 的改动已入库并推送（`bc3e2aa`：虚拟按键 `VirtualPad.vue` / `utils/vkeys.js` / `format.js` ORIGIN 修复）；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
-- ⚠️ **2.0.6 的改动（素材库 + 系列 + mcstructure 下线）尚未提交**（`V4__assets_and_series.sql`、`Asset*/Series*` 后端、`Assets.vue` / `MeAssets.vue` / `AssetUploader.vue`、`MeProjects`/`Upload`/`ProjectDetail`/`Home`/`BottomTabBar`/`ConsoleLayout`、`devlog.md`、本文件）
-- ⚠️ 同一工作区里还有**另一个并行会话**在改 `bug_feedback` 相关文件（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue`、`AdminController`、`InteractionController`、`ViewMapper`、`AdminService`、`AdminReview`/`AdminStats`/`http.js`/若干文案文件）。**提交前务必按路径挑拣，别把对方未完成的改动一起 commit。**
-- 未提交改动（11-15 22:20 现状，`git status --porcelain` 共 28 行）：
+- 2.0.6 的改动已入库并推送（`cce4cb7`：素材库 + 项目/素材系列 + mcstructure 下线 + 后台 bug 反馈面板；`bc3e2aa..cce4cb7`，首次 push 遇 `OpenSSL SSL_read: unexpected eof` 重试即通）
+- ⚠️ **2.1.0 的改动（EP 变量特异性修复 + 文案清理 + 下载页 2.1.0 条目 + `APP_BUILD`）在工作区未提交**
+- 提交规范提醒：同一工作区曾出现过**并行会话**同时改 `bug_feedback` 相关文件的情况（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue` 等）。**提交前务必按路径挑拣**，别把对方未完成的改动一起 commit。
+- 下面这份清单是 11-15 的**历史快照**（`git status --porcelain` 共 28 行），仅作参考，不代表当前工作区：
 
   ```
   backend/.../auth/AuthInterceptor.java
@@ -266,13 +267,14 @@ E:\Project Files\COC_rebuild
   | **2.0.4** | **14** | 11-19 10:36（视图切换 + 全屏横屏） |
   | **2.0.5** | **15** | 11-19 11:21（虚拟按键：双摇杆 + 自定义按键） |
   | **2.0.6** | **16** | 11-19 16:04（下线 mcstructure + 素材库 + 项目/素材系列） |
+  | **2.1.0** | **17** | 11-19 17:19（手机端补齐素材库 + 修明暗模式按钮配色，五期收官） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 已按此规则执行：code 13 / 14 / 15 / 16，从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 / 2.1.0 已按此规则执行：code 13 / 14 / 15 / 16 / 17，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -320,10 +322,10 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/latest`
-- 当前线上 `coc-app-2.0.6.apk` = `coc-app-latest.apk` = **3,864,440 B**（2.0.6 / code 16，签名 `CN=Collection of Creations`，sha256 `fd71292cd183755ef83f6b78243527cb503f99a97d1335b744c4374b7060d41e`）
-- 公网实下一致（`Cache-Control: no-store` + `cf-cache-status: BYPASS`，不会再被 CF 缓存成旧包）
-- `version.json` / `version.txt` 已同步为 2.0.6 / 16
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/2.1.0/latest`
+- 当前线上 `coc-app-2.1.0.apk` = `coc-app-latest.apk` = **3,886,799 B**（2.1.0 / code 17，签名 `CN=Collection of Creations`，sha256 `6633852f2780a6242db86702fbd625cbe1a11c1ef9fa14844f6f147052760abf`）
+- 公网实下一致（`Content-Length: 3886799`，`Cache-Control: no-store` + `cf-cache-status: BYPASS`，不会再被 CF 缓存成旧包）
+- `version.json` / `version.txt` 已同步为 2.1.0 / 17
 
 ---
 
@@ -334,14 +336,15 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 | 1 | **App 端"无法创建项目草稿"** | ✅ **已定位并修复（v2.0.3）**：根因是输入框容器失效——App 里中文输入法打字，输入框有字但 `v-model` 收不到值，`title/summary` 恒为空，按钮 `:disabled` 死锁，请求从未发出（nginx 日志里 Android UA 零 `POST /api/v1/projects` 即为证据）。改法见第十章。**待用户装 2.0.3 实测确认** |
 | 2 | **APK 下载被 CF 链路截断** | 实测 1,015,808/3,850,562 B；下载后需校验字节数，必要时用系统浏览器/下载器重试（2.0.3 本地直连 3,853,343 B 正常，对外链路仍待验） |
 | 3 | **versionCode 回退与重复**（2.0=11 < 1.11=12；2.0.1 与 2.0.2 同为 12） | ✅ 2.0.3 已用 code=13，规则写入 5.1；后续继续 +1 |
-| 4 | 未提交改动堆积 | 2.0.3~2.0.5 已入库推送；**2.0.6 的素材/系列改动 + 并行会话的 bug_feedback 改动仍未提交**，提交前按路径挑拣（见「版本控制状态」） |
-| 5 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
-| 6 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
-| 7 | `/admin` 未挂 Cloudflare Access | 建议加，避免后台裸奔 |
-| 8 | 6 条未落地规格 | 贡献分流水表、拉黑屏蔽、游客账号、动态上传限额、`hasPreview`、人工放行扫描失败文件 |
-| 9 | 沙箱独立域（`8087` + `p1.`）未做 | 与"项目运行隔离"安全相关 |
-| 10 | `8083`（tutor）根路径 500 | 待查（该站非 COC 主线） |
-| 11 | 测试数据残留 | **实测仅 27 行项目**；`226/227/228`（author 115）建议软删；`225 电磁力演示` 已发布（status=2，author 101）为正常数据，**勿动** |
+| 4 | 未提交改动堆积 | 2.0.3~2.0.6 已入库推送（HEAD `cce4cb7`）；**2.1.0 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
+| 5 | ⚠️ **APK 打包后必须解包自检** | 2.0.6 曾因 `www/` 残留旧前端，打出的包底栏还是「MC结构」（v2.1.0 已修）。**以后每次出包都要 `unzip -p app-release.apk assets/public/index.html` 核对入口 hash 与 `frontend/dist` 一致，并确认新分包存在**，详见第十四章 |
+| 6 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
+| 7 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
+| 8 | `/admin` 未挂 Cloudflare Access | 建议加，避免后台裸奔 |
+| 9 | 6 条未落地规格 | 贡献分流水表、拉黑屏蔽、游客账号、动态上传限额、`hasPreview`、人工放行扫描失败文件 |
+| 10 | 沙箱独立域（`8087` + `p1.`）未做 | 与"项目运行隔离"安全相关 |
+| 11 | `8083`（tutor）根路径 500 | 待查（该站非 COC 主线） |
+| 12 | 测试数据残留 | **实测仅 27 行项目**；`226/227/228`（author 115）建议软删；`225 电磁力演示` 已发布（status=2，author 101）为正常数据，**勿动** |
 
 ---
 
@@ -724,4 +727,154 @@ frontend/src/views/MeAssets.vue             我的素材 /me/materials
 7. 用一个 >100MB 的素材上传，确认分片上传能跑完（走的是项目源码那条分片链路）；
 8. 覆盖安装 2.0.5 → 2.0.6 是否被拦（code 16 > 15，理论上通过）。
 
-**注意**：APK 不受影响（原生壳走 `ORIGIN` 分支），无需重打包；网页端需硬刷新（Ctrl+F5）清掉旧 chunk 缓存。
+**注意 ①**：网页端需硬刷新（Ctrl+F5）清掉旧 chunk 缓存。
+
+**注意 ②（2.1.0 修正，重要）**：~~APK 不受影响，无需重打包~~ —— **这句话是错的**，2.0.6 正是因为信了它才出问题。Capacitor 壳加载的是 APK 内自带的 `assets/public/`（由 `www/` 拷贝而来），**不读线上的 `frontend/dist`**；前端一改，必须重跑 `cap sync` + 重新出包，否则手机端永远停留在旧前端。详见第十四章。
+
+---
+
+## 十四、v2.1.0 记录（2026-11-19 17:19）· 手机端补齐素材库 + 明暗模式按钮配色修复（五期测试收官）
+
+### 14.1 需求来源
+
+用户实测 2.0.6 后反馈两条：
+
+1. **「手机端的 2.0.6 版本前端并没有同步此次更改（依旧还是 mcstructure）」** —— 手机 App 里底栏还是「MC结构」，素材库页面不存在；
+2. **「项目草稿创建界面的按钮在明暗模式下的样式有问题」** —— 投稿向导的主按钮在深色模式下变成 Element Plus 默认蓝，跟站点主题不搭。
+
+做完后打包为 **2.1.0（versionCode 17）**，作为五期测试的收官版本。
+
+### 14.2 关键修复一：APK 里打进了旧前端
+
+**根因**：`E:/Server Data\apk-build\coc-app\www\` 是 Capacitor 的 web 资源来源目录，打包时 `cap sync` 把它整个拷进 `android/app/src/main/assets/public/`。2.0.6 出包时**没有先执行「`frontend/dist` → `www`」这一步**，`www/` 还是上一轮（2.0.5 时代）的残留：
+
+| 位置 | 2.0.6 出包时的实际值 |
+| --- | --- |
+| `frontend/dist/index.html` | `assets/index-Cb1rm9_k.js`（含 `Assets-*` / `MeAssets-*`） |
+| `apk-build/coc-app/www/index.html` | `assets/index-CTIiWO9z.js` ← **更旧** |
+| APK 内 `assets/public/index.html` | `assets/index-CrLUMb5x.js` ← 最终被打进去的 |
+| APK 内是否有 `Assets-*` / `MeAssets-*` | **没有** |
+| APK 内 `BottomTabBar-*.js` | 仍命中 `MC结构` |
+
+也就是说：**源码、`dist`、线上网页三者都是新的，只有 APK 是旧的**。发布脚本 `scripts/build-coc-apk.ps1` 本身有 copy 步骤，是那次没走完整脚本、只单跑了 gradle 造成的。
+
+**修复步骤**（`www` 只放静态资源：`index.html` + `assets/`）：
+
+```bash
+cd "E:/Server Data/apk-build/coc-app/www"
+rm -f index.html assets/* && rmdir assets          # 清干净，避免旧 chunk 残留
+cp -r "E:/Project Files/COC_rebuild/frontend/dist/." .
+cd .. && npx cap sync android                       # 约 3~4 分钟（update android 较慢）
+cd android && ./gradlew.bat assembleRelease --no-daemon
+```
+
+**2.1.0 出包后的解包自检**（546 个条目，前端 71 个文件）：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `assets/public/index.html` 入口 | `assets/index-yZCrbRZ5.js`，与 `frontend/dist` **完全一致** ✅ |
+| 素材库分包 | `Assets-DYhVDBu_.js` / `Assets-IJ5nQyoH.css` / `MeAssets-B7vtCBoe.js` / `MeAssets-I9xZ0yUb.css` ✅ |
+| 底栏文案 | `BottomTabBar-Dg8HOcRJ.js`：`素材`×1、`MC结构`×0 ✅ |
+| `mcstructure` 全量搜索 | 仅 `format-CA8eiKFc.js` 的 `TYPE_LABEL.mcstructure="MC 结构"`（历史类型展示，有意保留）✅ |
+| 版本标记 | `index-yZCrbRZ5.js` 内含 `v2.1.0` ✅ |
+| badging | `versionCode='17' versionName='2.1.0'` ✅ |
+
+> 🔴 **写进流程**：以后每次出包，**必须解包核对入口 hash**，不能只看 `BUILD SUCCESSFUL`：
+> ```bash
+> unzip -p app-release.apk assets/public/index.html | grep -o 'assets/index-[^"]*\.js'
+> unzip -l app-release.apk | grep -E 'assets/public/assets/(Assets|MeAssets)-'
+> ```
+> 第一条的输出必须等于 `frontend/dist/index.html` 里的那个文件名。
+
+### 14.3 关键修复二：深色模式按钮配色（CSS 特异性）
+
+**根因**：`frontend/src/styles/tokens.css` 把项目设计变量映射到 Element Plus 变量时，选择器写的是 `:root`（特异性 **0,1,0**）；而 `element-plus/theme-chalk/dark/css-vars.css` 用的是 `html.dark { … }`（特异性 **0,1,1**）。深色模式下后者优先，**整套 `--el-*` 变量被官方深色默认值覆盖**：主色退回 `#409EFF`、背景退回 `#141414`、边框退回 `#4C4D4F`。浅色模式没有这份覆盖表，所以只有深色出问题 —— 这就是「明暗模式样式不一致」的本质。
+
+**实测数据**（无头浏览器 `getComputedStyle`）：
+
+| 取色点 | 修复前（深色） | 修复后（深色） | 修复后（浅色） |
+| --- | --- | --- | --- |
+| 主按钮背景 | `rgb(64,158,255)` | `rgb(108,134,255)` | `rgb(79,110,247)` |
+| 次要按钮背景 | `rgb(20,20,20)` | `rgb(21,25,35)` | — |
+| 次要按钮文字 | 不可读 | `rgb(164,172,189)` | — |
+
+**修复（三处联动，缺一不可）**：
+
+1. **`tokens.css`** —— 映射选择器改成一组，特异性不输给 EP 深色表；并补 `.el-button--primary` / `.is-disabled` 的显式按钮变量：
+
+   ```css
+   :root,
+   html.dark,
+   html[data-theme='dark'],
+   html[data-theme='light'] {
+     --el-color-primary: var(--c-primary);
+     --el-text-color-placeholder: var(--c-text-3);
+     --el-border-color-extra-light: var(--c-border);
+     --el-fill-color-lighter: var(--c-bg-hover);
+     --el-disabled-bg-color: var(--c-bg-sunken);
+     /* … */
+   }
+   ```
+
+2. **`stores/ui.js`** —— `ACCENTS` 每套主题色补一档 `primaryLight`（深一档），`apply()` 里 `mode === 'light' ? a.primaryLight : a.primary`。原因：`#6c86ff` 做浅色底 + 白字对比度不足，必须换 `#4f6ef7`。
+3. **`index.html`** —— 首屏内联脚本的 `ACCENTS` 改成 4 元组 `[darkPrimary, lightPrimary, accent, accent2]`，保证 Vue 挂载前**首帧**的颜色就正确，不闪。
+
+### 14.4 顺带清理：下线板块的残留文案
+
+| 文件 | 改动 |
+| --- | --- |
+| `components/BizTabs.vue` | `Scratch / HTML / 结构文件…` → `Scratch / HTML / 素材…` |
+| `views/DevApply.vue` | 头部说明改为「投稿自己的作品（HTML / Scratch）… 图片、音视频等素材请传到「我的素材」」；条款 3 改为「Scratch 为纯数据/平台打包产物，免审直发」 |
+| `views/MeProjects.vue` | 空状态 → 「投稿你的第一个小造物，Scratch 免审直发；素材可在「我的素材」上传」 |
+| `views/admin/AdminReview.vue` | 「Scratch 与结构文件免审不进队列」→「Scratch 免审不进队列」 |
+
+**有意保留**：`utils/format.js` 的 `TYPE_LABEL.structure` / `.mcstructure`、`ProjectDetail.vue` 的「板块已下线」兜底 —— 历史项目类型标签必须能正常渲染。
+
+### 14.5 涉及文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/styles/tokens.css` | 选择器特异性修复（核心）+ 主按钮/禁用态显式变量 |
+| `frontend/src/stores/ui.js` | `ACCENTS` 增加 `primaryLight`，`apply()` 按明暗取主色 |
+| `frontend/index.html` | 首屏主题脚本色板同步为 4 元组 |
+| `frontend/src/views/Downloads.vue` | 新增 2.1.0 条目 |
+| `frontend/src/utils/platform.js` | `APP_BUILD='v2.1.0'` |
+| `BizTabs.vue` / `DevApply.vue` / `MeProjects.vue` / `admin/AdminReview.vue` | 下线板块残留文案 |
+| `apk-build/coc-app/www/` | 全量重同步（本次故障的直接产出物） |
+| `apk-build/coc-app/android/app/build.gradle` | `versionCode 17` / `versionName "2.1.0"` |
+| `coc-platform/downloads/` | `coc-app-2.1.0.apk`、`coc-app-latest.apk`、`version.json`、`version.txt` |
+
+### 14.6 发布与验证
+
+| 项 | 值 |
+| --- | --- |
+| 包大小 | 3,886,799 B |
+| sha256 | `6633852f2780a6242db86702fbd625cbe1a11c1ef9fa14844f6f147052760abf` |
+| 签名 | `CN=Collection of Creations`，证书 SHA-256 `1324f12e…2958b5`（同历史包，可覆盖安装） |
+| 本地 | `/downloads/version.json` = 2.1.0；APK `200` / `Content-Length: 3886799` |
+| 公网 | `https://collectionofcreations.uk/downloads/version.json` = 2.1.0；APK `Content-Length: 3886799`（未命中旧缓存） |
+| 网页端 | 本地与公网入口 hash 一致 `assets/index-yZCrbRZ5.js` |
+| 前端构建 | `vite build --outDir dist.n1` → 合并进 `dist`（71 文件）+ prune 36 个旧 chunk |
+
+### 14.7 一个无害的「死循环」说明
+
+`Downloads.vue` 里的 2.1.0 条目写的是 `size: 3886681`，而最终包是 3,886,799 B（差 118 B）。原因是：改页面 → 体积变 → 重打包 → 体积再变，永远追不上。
+
+**不必追**：下载页的**最新版卡片**是 `onMounted` 里 `fetch('/downloads/version.json')` 动态取的（`latest = remote || RELEASES[0]`），数组里的 `size` 只是**接口不可达时的兜底**；且 `fmtSize()` 两者都显示「3.7 MB」，肉眼无差别。数组条目只承担「这个版本存在过」的历史枚举作用。
+
+### 14.8 五期测试闭环清单
+
+| # | 问题 | 版本 |
+| --- | --- | --- |
+| 1 | 手机端草稿建不出来（输入框 `v-model` 失效） | 2.0.3 |
+| 2 | 下载 404（`API_ORIGIN` 写死 `127.0.0.1:8090`） | 2.0.3 后修 |
+| 3 | 手机端默认手机版视图 + 可切电脑版 + 全屏自动横屏 + 控制侧栏 | 2.0.4 |
+| 4 | 全屏虚拟按键（双摇杆独立映射 + 自定义按键 + 拖动 + 透明度/尺寸 + 本地持久化） | 2.0.5 |
+| 5 | mcstructure 下线、素材库 + 项目/素材系列 | 2.0.6 |
+| 6 | **手机端未同步素材库 + 明暗模式按钮配色** | **2.1.0** |
+
+### 14.9 清理
+
+- 删临时构建目录 `frontend/dist.n1`（已合并并 prune）。
+- `frontend/dist-user` **未重建**：线上 nginx 已无任何 site 引用它，属历史遗留。
+- 解包校验目录 `E:/Server Data/tmp/apkchk` 用完即删。

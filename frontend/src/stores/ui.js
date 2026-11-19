@@ -4,15 +4,17 @@ const THEME_KEY = 'coc_theme'        // dark | light | auto
 const ACCENT_KEY = 'coc_accent'      // 配色 id
 const AUTOLOAD_KEY = 'coc_autoload'  // '1' | '0'：卡片是否自动加载 HTML 实时预览
 
-/** 可选主题色（主色 / 强调色 / 渐变收尾色） */
+/** 可选主题色（主色 / 强调色 / 渐变收尾色）
+ *  primary 用于深色模式；浅色模式用 primaryLight（更深一档）——浅底上用深色模式的亮蓝，
+ *  按钮会发白发灰、白字对比度不足（五期测试反馈：投稿向导按钮明暗不一致）。 */
 export const ACCENTS = [
-  { id: 'indigo',  name: '靛蓝', primary: '#6c86ff', accent: '#7b5cf0', accent2: '#a855f7' },
-  { id: 'violet',  name: '紫罗兰', primary: '#a855f7', accent: '#8b5cf6', accent2: '#d946ef' },
-  { id: 'cyan',    name: '青蓝', primary: '#22b8cf', accent: '#3bc9db', accent2: '#4dabf7' },
-  { id: 'emerald', name: '翡翠', primary: '#2fbf71', accent: '#20c997', accent2: '#12b886' },
-  { id: 'amber',   name: '琥珀', primary: '#f59f00', accent: '#f76707', accent2: '#e8590c' },
-  { id: 'rose',    name: '玫红', primary: '#f0506e', accent: '#e64980', accent2: '#c2255c' },
-  { id: 'slate',   name: '石墨', primary: '#7c8a9c', accent: '#5c6b7a', accent2: '#4a5568' }
+  { id: 'indigo',  name: '靛蓝', primary: '#6c86ff', primaryLight: '#4f6ef7', accent: '#7b5cf0', accent2: '#a855f7' },
+  { id: 'violet',  name: '紫罗兰', primary: '#a855f7', primaryLight: '#8b3fd9', accent: '#8b5cf6', accent2: '#d946ef' },
+  { id: 'cyan',    name: '青蓝', primary: '#22b8cf', primaryLight: '#0b8fa3', accent: '#3bc9db', accent2: '#4dabf7' },
+  { id: 'emerald', name: '翡翠', primary: '#2fbf71', primaryLight: '#128a4d', accent: '#20c997', accent2: '#12b886' },
+  { id: 'amber',   name: '琥珀', primary: '#f59f00', primaryLight: '#b45309', accent: '#f76707', accent2: '#e8590c' },
+  { id: 'rose',    name: '玫红', primary: '#f0506e', primaryLight: '#d92d50', accent: '#e64980', accent2: '#c2255c' },
+  { id: 'slate',   name: '石墨', primary: '#7c8a9c', primaryLight: '#5c6b7a', accent: '#5c6b7a', accent2: '#4a5568' }
 ]
 
 function sysPrefersLight() {
@@ -60,7 +62,9 @@ export const useThemeStore = defineStore('theme', {
       root.classList.toggle('dark', mode === 'dark')
 
       const a = this.accentDef
-      root.style.setProperty('--c-primary', a.primary)
+      // 浅色底上必须用深一档的主色，否则白字按钮对比度不足（见 ACCENTS 注释）
+      const primary = mode === 'light' ? (a.primaryLight || a.primary) : a.primary
+      root.style.setProperty('--c-primary', primary)
       root.style.setProperty('--c-accent', a.accent)
       root.style.setProperty('--c-accent-2', a.accent2)
 
