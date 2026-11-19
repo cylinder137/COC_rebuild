@@ -1,4 +1,5 @@
 /* 项目类型 / 状态 / 数字格式化 —— 全站共用口径 */
+import { ORIGIN } from '@/api/http'
 
 export const TYPE_LABEL = { html: 'HTML', scratch: 'Scratch', structure: 'MC 结构', mcstructure: 'MC 结构' }
 
@@ -71,8 +72,11 @@ export function fmtDateTime(t) {
 
 /** 后端可能给绝对/相对 URL；统一成可直接放 <img>/<iframe> 的地址 */
 const API_ORIGIN = (() => {
-  const base = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8090/api/v1'
-  try { return new URL(base).origin } catch (e) { return '' }
+  // 与 api/http.js 保持同一口径：原生壳(Capacitor)里页面源是 https://localhost，
+  // 所有相对路径都会打到壳内部 → 封面/头像/沙箱 iframe 全部失效，必须改成线上绝对源。
+  if (ORIGIN) return ORIGIN
+  const base = import.meta.env.VITE_API_BASE || ''
+  try { return base ? new URL(base, 'http://127.0.0.1:8090').origin : '' } catch (e) { return '' }
 })()
 
 export function fileUrl(p) {

@@ -60,7 +60,7 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <a class="nav-item nav-download" href="/downloads/coc-app-latest.apk" download>
+        <a class="nav-item nav-download" :href="apkUrl" download>
           <el-icon class="xs"><Download /></el-icon> 下载 App
         </a>
       </nav>
@@ -69,7 +69,7 @@
         <a
           v-if="!isApp"
           class="icon-btn only-sm"
-          href="/downloads/coc-app-latest.apk"
+          :href="apkUrl"
           download
           title="下载 App"
           aria-label="下载 App"
@@ -99,7 +99,7 @@
           </router-link>
           <el-dropdown trigger="click" @command="onCommand">
             <span class="avatar-btn">
-              <el-avatar :size="30" :src="auth.user?.avatar_path">
+              <el-avatar :size="30" :src="fileUrl(auth.user?.avatar_path)">
                 {{ (auth.displayName || 'U').slice(0, 1) }}
               </el-avatar>
             </span>
@@ -134,6 +134,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, useUiStore } from '@/stores/ui'
 import { categoryApi, safe, IS_USER_ZONE } from '@/api'
 import { IS_APP, APP_BUILD } from '@/utils/platform'
+import { fileUrl } from '@/utils/format'
+import { ORIGIN } from '@/api'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
@@ -150,6 +152,13 @@ const isUserZone = IS_USER_ZONE
 const isApp = IS_APP
 /** App 里的构建标记，用来一眼确认装的是不是新包 */
 const buildTag = APP_BUILD
+/**
+ * 下载地址：带 ?v=<发布号> 做缓存穿透。
+ * Cloudflare 会把 /downloads/coc-app-latest.apk 缓存在边缘（max-age=3600），
+ * 换包后不清缓存就会出现「下到的还是旧版本」，加查询串即视为新 URL（2026-11-15）。
+ */
+const APK_RELEASE = '2.0.3'
+const apkUrl = `${ORIGIN}/downloads/coc-app-latest.apk?v=${APK_RELEASE}`
 
 /** 回退上一步；没有历史时回首页 */
 function goBack() {

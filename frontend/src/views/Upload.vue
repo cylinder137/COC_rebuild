@@ -44,14 +44,22 @@
     <!-- 步骤 2：信息 -->
     <div v-show="step === 1" class="card">
       <el-form :model="form" label-position="top" style="max-width:640px">
+        <!-- data-field：App 里 v-model 可能收不到中文输入，靠它读 DOM 真实值兜底，
+             详见 utils/formDom.js。删掉这个属性输入框在手机端会「填了等于没填」 -->
         <el-form-item label="作品标题" required>
-          <el-input v-model="form.title" maxlength="50" show-word-limit placeholder="例如：像素小迷宫" />
+          <div data-field="title" class="fld">
+            <el-input v-model="form.title" maxlength="50" show-word-limit placeholder="例如：像素小迷宫" />
+          </div>
         </el-form-item>
         <el-form-item label="一句话简介" required>
-          <el-input v-model="form.summary" maxlength="80" show-word-limit placeholder="用一句话说清它是什么、怎么玩" />
+          <div data-field="summary" class="fld">
+            <el-input v-model="form.summary" maxlength="80" show-word-limit placeholder="用一句话说清它是什么、怎么玩" />
+          </div>
         </el-form-item>
         <el-form-item label="详细介绍">
-          <el-input v-model="form.description" type="textarea" :rows="5" maxlength="2000" show-word-limit placeholder="玩法说明、操作方式、素材来源等" />
+          <div data-field="description" class="fld">
+            <el-input v-model="form.description" type="textarea" :rows="5" maxlength="2000" show-word-limit placeholder="玩法说明、操作方式、素材来源等" />
+          </div>
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category_id" placeholder="请选择分类" style="width:100%">
@@ -72,9 +80,11 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <div class="row between" style="margin-top:12px">
+      <div class="row between upload-actions">
         <el-button @click="step = 0">上一步</el-button>
-        <el-button type="primary" :loading="creating" :disabled="!canNext" @click="saveDraft">
+        <!-- 不再用 :disabled 拦住：手机端模型可能没跟上输入，按钮灰着用户只会觉得「点不动」。
+             改成永远可点，点下去先读 DOM 再校验，缺什么就明确告诉他 -->
+        <el-button type="primary" :loading="creating" @click="saveDraft">
           保存并继续（创建草稿）
         </el-button>
       </div>
@@ -106,6 +116,7 @@
             </div>
             <el-input
               v-model="pastedHtml"
+              data-field="paste"
               type="textarea"
               :rows="14"
               resize="vertical"
@@ -120,7 +131,6 @@
               <el-button
                 type="primary"
                 :loading="pasteUploading"
-                :disabled="!pastedHtml.trim()"
                 @click="uploadPasted"
               >
                 用这段源码上传
@@ -186,13 +196,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChunkUploader from '@/components/ChunkUploader.vue'
 import CoverUploader from '@/components/CoverUploader.vue'
 import { categoryApi, uploadApi, safe } from '@/api'
+import { reportClientError } from '@/api/http'
 import { isAutoApproved } from '@/utils/format'
+import { attachFieldSync, focusField, pullFields, readDomField } from '@/utils/formDom'
 
 const router = useRouter()
 const step = ref(0)
@@ -236,7 +248,10 @@ const pasteWarn = computed(() => {
 })
 
 async function uploadPasted() {
-  if (!pastedHtml.value.trim()) { ElMessage.warning('请先粘贴 HTML 源码'); return }
+  // 粘贴框同样可能收不到 v-model（App 内长按粘贴 + 中文输入法），以 DOM 为准
+  const domText = readDomField('paste')
+  if (domText != null && domText !== pastedHtml.value) pastedHtml.value = domText
+  if (!String(pastedHtml.value || '').trim()) { ElMessage.warning('请先粘贴 HTML 源码'); return }
   if (!form.project_id) { ElMessage.warning('草稿尚未创建，请返回上一步'); return }
   pasteUploading.value = true
   try {
@@ -253,26 +268,151 @@ const types = [
 ]
 
 const isAuto = computed(() => isAutoApproved(form.project_type))
-const canNext = computed(() => !!form.title.trim() && !!form.summary.trim())
 // 只要有草稿(project_id)就允许点提交：即使刷新丢了上传状态也能提交，
 // 缺源码时后端会返回明确错误（"请先上传项目源码后再提交"）
 const canSubmit = computed(() => !!(uploaded.value?.project_file_id || form.project_id))
 
+/* ---------------- 输入兜底（Android WebView） ----------------
+   手机端 App 里中文输入法打字时 v-model 可能收不到值：输入框有字、模型是空，
+   于是「保存」拿空标题去建草稿，或被 disabled 卡住，请求根本发不出去。
+   这里在原生 input/textarea 上直接监听，把 DOM 真实值回填给模型；
+   保存/提交前再整体拉一次，保证「看到什么就提交什么」。详见 utils/formDom.js */
+const TEXT_FIELDS = ['title', 'summary', 'description']
+let detachFieldSync = () => {}
+
+function applyField(name, value) {
+  if (name === 'paste') { pastedHtml.value = value; return }
+  if (name in form) form[name] = value
+}
+
+/** 保存/提交前同步一次；force=true 表示以 DOM 为准（含空值） */
+function syncFromDom(force) {
+  const fixed = pullFields(form, TEXT_FIELDS, { force: !!force })
+  const pasted = readDomField('paste')
+  if (pasted != null && pasted !== pastedHtml.value) {
+    pastedHtml.value = pasted
+    fixed.push('paste')
+  }
+  return fixed
+}
+
+/* ---------------- 本地暂存：App 被系统回收后回来能接着填 ----------------
+   只暂存「还没建成草稿」的填写内容；草稿一旦入库就以数据库为准，避免两份数据打架 */
+const DRAFT_KEY = 'coc_upload_draft_v1'
+let persistTimer = null
+
+function persistDraft() {
+  try {
+    if (form.project_id) { localStorage.removeItem(DRAFT_KEY); return }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      v: 1,
+      step: step.value,
+      project_type: form.project_type,
+      title: form.title,
+      summary: form.summary,
+      description: form.description,
+      category_id: form.category_id,
+      tags: form.tags
+    }))
+  } catch (e) {}
+}
+function persistDraftSoon() {
+  clearTimeout(persistTimer)
+  persistTimer = setTimeout(persistDraft, 400)
+}
+function clearDraftCache() {
+  try { localStorage.removeItem(DRAFT_KEY) } catch (e) {}
+}
+/** @returns {boolean} 是否恢复出了内容 */
+function restoreDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
+    if (!d || typeof d !== 'object') return false
+    for (const k of ['project_type', 'title', 'summary', 'description', 'category_id']) {
+      if (d[k] != null && d[k] !== '') form[k] = d[k]
+    }
+    if (Array.isArray(d.tags)) form.tags = d.tags
+    if (form.project_type) step.value = 1
+    return !!(form.title || form.summary)
+  } catch (e) {
+    return false
+  }
+}
+
 async function saveDraft() {
-  if (!canNext.value) { ElMessage.warning('请填写标题与简介'); return }
-  creating.value = true
-  const payload = { ...form, tags: form.tags.slice(0, 5) }
-  delete payload.project_id
+  if (creating.value) return
+  // 1) 先把 DOM 里的真实输入拉回模型（手机端 v-model 可能漏事件）
+  const fixed = syncFromDom(true)
+  try {
+    reportClientError(
+      'up-save',
+      'model=' + (form.title || '').length + '/' + (form.summary || '').length +
+      ' dom=' + (readDomField('title') || '').length + '/' + (readDomField('summary') || '').length +
+      ' fix=' + fixed.join('|') + ' type=' + (form.project_type || '-') +
+      ' token=' + (!!localStorage.getItem('coc_token'))
+    )
+  } catch (e) {}
+
+  // 2) 校验（失败要把光标送到出问题的框里，否则用户不知道哪里没填上）
+  const title = (form.title || '').trim()
+  const summary = (form.summary || '').trim()
+  form.title = title
+  form.summary = summary
+  if (!form.project_type) { ElMessage.warning('请先选择项目类型'); step.value = 0; return }
+  if (!title) { ElMessage.warning('请先填写作品标题'); focusField('title'); return }
+  if (!summary) { ElMessage.warning('请先填写一句话简介'); focusField('summary'); return }
+
+  const payload = {
+    project_type: form.project_type,
+    title,
+    summary,
+    description: form.description || '',
+    category_id: form.category_id || null,
+    tags: (Array.isArray(form.tags) ? form.tags : []).slice(0, 5)
+  }
   // 封面是在草稿建好之后由 CoverUploader 直接写库的，这里空值不能回传（否则会把已上传的封面覆盖成空）
-  if (!payload.cover_path) delete payload.cover_path
-  const r = await safe(uploadApi.createProject(payload))
-  creating.value = false
-  if (!r.ok) {
-    ElMessage.error(r.error?.response?.data?.message || '创建草稿失败（后端 8090 可能未启动）')
+  if (form.cover_path) payload.cover_path = form.cover_path
+
+  creating.value = true
+  let r
+  try {
+    r = await safe(uploadApi.createProject(payload))
+  } catch (e) {
+    // 连 axios 都没跑起来（极少见）：不要卡在 loading 里
+    creating.value = false
+    reportClientError('up-throw', String((e && (e.message || e)) || ''))
+    ElMessage.error('创建草稿失败：' + String((e && (e.message || e)) || '未知错误'))
     return
   }
+  creating.value = false
+
+  if (!r.ok) {
+    // 超时/断网/网关错误时后端可能已经建好了（CF 链路偶发 20s+），先对账再报错，避免重复创建
+    const status = r.error?.response?.status
+    const likelyLanding = !r.error?.response || r.error?.code === 'ECONNABORTED' || status >= 500
+    if (likelyLanding) {
+      ElMessage.info('网络较慢，正在确认草稿是否已创建…')
+      const rec = await safe(uploadApi.myProjects({ page: 1, size: 5 }))
+      const list = rec.ok ? (rec.data?.list || rec.data?.records || rec.data?.items || rec.data || []) : []
+      const hit = Array.isArray(list)
+        ? list.find((x) => x && String(x.title || '').trim() === title && Number(x.status) === 0)
+        : null
+      if (hit) {
+        form.project_id = hit.project_id || hit.id
+        clearDraftCache()
+        ElMessage.success('草稿已创建（网络超时，但数据已保存）')
+        step.value = 2
+        return
+      }
+    }
+    const detail = r.error?.response?.data?.message || r.error?.message || ''
+    ElMessage.error('创建草稿失败' + (status ? '（' + status + '）' : '') + '：' + (detail || '请重试'))
+    return
+  }
+
   form.project_id = r.data?.project_id || r.data?.id
   if (r.data?.cover_path) form.cover_path = r.data.cover_path
+  clearDraftCache()
   ElMessage.success('草稿已保存')
   step.value = 2
 }
@@ -289,7 +429,11 @@ function onUploaded(res) {
 watch(step, async () => {
   await nextTick()
   window.scrollTo({ top: 0, behavior: 'auto' })
+  persistDraftSoon()
 })
+
+/* 表单内容变化 → 本地暂存（App 被系统回收 / 切后台杀进程后回来还在） */
+watch(form, () => persistDraftSoon(), { deep: true })
 
 /** 上传完成即自动提交：html → status=1 待审核；scratch/structure → status=2 直接发布
  *  服务端 submit 会校验「有版本 + 有 source 文件」；已在审核/已是发布态时静默视为成功 */
@@ -319,6 +463,7 @@ async function autoSubmitAfterUpload() {
 function onCover(d) { form.cover_path = d?.cover_path || '' }
 
 async function submit() {
+  syncFromDom(true)
   if (!form.project_id) { ElMessage.warning('草稿尚未创建，请返回上一步'); return }
   submitting.value = true
   const r = await safe(uploadApi.submit(form.project_id))
@@ -335,9 +480,33 @@ async function submit() {
   router.push('/me/projects')
 }
 
+/** 重新挂输入兜底：粘贴面板是 v-if 渲染的，出现/切换后要重新绑定 */
+function setupFieldSync() {
+  try { detachFieldSync() } catch (e) {}
+  detachFieldSync = attachFieldSync(['title', 'summary', 'description', 'paste'], applyField)
+  // 刚挂上时把已有 DOM 值补进模型（恢复暂存 / 浏览器自动填充都可能只写了 DOM）
+  syncFromDom(false)
+}
+
+watch([srcMode, canPaste], async () => {
+  await nextTick()
+  setupFieldSync()
+})
+
 onMounted(async () => {
+  await nextTick()
+  setupFieldSync()
+  if (restoreDraft()) {
+    ElMessage.info('已恢复上次未提交的填写内容')
+    setTimeout(() => syncFromDom(false), 60)
+  }
   const r = await safe(categoryApi.list())
   if (r.ok && Array.isArray(r.data)) categories.value = r.data
+})
+
+onBeforeUnmount(() => {
+  try { detachFieldSync() } catch (e) {}
+  clearTimeout(persistTimer)
 })
 </script>
 
@@ -371,6 +540,8 @@ onMounted(async () => {
   color: var(--c-primary); font-weight: 600;
 }
 .paste-box { border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: 12px; background: var(--c-bg-sunken); }
+/* data-field 包装层：撑满 el-form-item 内容宽，否则输入框会缩成半宽 */
+.fld { width: 100%; }
 /* 手机上等宽字体更容易对齐缩进；字号不小于 13px 否则 iOS/Android 会自动放大 */
 .paste-area :deep(textarea) {
   font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace;

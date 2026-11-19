@@ -5,7 +5,7 @@
         <template v-if="user">
           <!-- 头部 -->
           <div class="card head">
-            <el-avatar :size="72" :src="user.avatar_path">{{ (user.nickname || 'U').slice(0, 1) }}</el-avatar>
+            <el-avatar :size="72" :src="fileUrl(user.avatar_path)">{{ (user.nickname || 'U').slice(0, 1) }}</el-avatar>
             <div class="grow">
               <div class="row center gap8 wrap">
                 <h1 class="u-name">{{ user.nickname || '匿名用户' }}</h1>
@@ -91,7 +91,7 @@ import ProjectCard from '@/components/ProjectCard.vue'
 import { userApi, interactApi, imApi, authApi, safe, setToken } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { pickList } from '@/utils/format'
+import { pickList, fileUrl } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()

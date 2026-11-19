@@ -144,6 +144,7 @@
                 <div v-if="auth.isLoggedIn" class="editor">
                   <el-input
                     v-model="draft"
+                    data-field="cmt_draft"
                     type="textarea"
                     :rows="3"
                     maxlength="500"
@@ -154,7 +155,7 @@
                   />
                   <div class="row between center" style="margin-top:8px">
                     <span class="xs dim">规则：楼中楼最多一层，回复会 @ 对方</span>
-                    <el-button type="primary" :loading="posting" :disabled="!draft.trim()" @click="submitComment()">
+                    <el-button type="primary" :loading="posting" @click="submitComment()">
                       发表评论
                     </el-button>
                   </div>
@@ -211,7 +212,7 @@
             <aside class="side-col">
               <div class="card">
                 <div class="row center gap12">
-                  <el-avatar :size="44" :src="detail.author?.avatar_path">
+                  <el-avatar :size="44" :src="fileUrl(detail.author?.avatar_path)">
                     {{ (detail.author?.nickname || 'U').slice(0, 1) }}
                   </el-avatar>
                   <div class="grow">
@@ -299,9 +300,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe } from '@/api'
+import { readDomField } from '@/utils/formDom'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
+  fileUrl,
   TYPE_LABEL, REASON_TYPES, auditModeOf, compactNum, fmtTime, fmtDateTime, statusOf, pickList, pickTotal, runUrlOf
 } from '@/utils/format'
 
@@ -628,6 +631,9 @@ function onReply(c) {
 
 async function submitComment() {
   if (requireLogin('评论需要登录')) return
+  // App 内 v-model 可能漏事件：以 DOM 实际值为准（详见 utils/formDom.js）
+  const dom = readDomField('cmt_draft')
+  if (dom != null && dom !== draft.value) draft.value = dom
   const content = draft.value.trim()
   if (!content) return
   posting.value = true

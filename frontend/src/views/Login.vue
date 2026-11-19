@@ -15,18 +15,22 @@
 
       <el-form :model="form" label-position="top" @submit.prevent="submit">
         <el-form-item label="QQ 号（账号）">
-          <el-input v-model="form.qq_account" placeholder="请输入注册时使用的 QQ 号" size="large" :prefix-icon="User" />
+          <div data-field="qq_account" class="fld">
+            <el-input v-model="form.qq_account" placeholder="请输入注册时使用的 QQ 号" size="large" :prefix-icon="User" />
+          </div>
         </el-form-item>
         <el-form-item label="密码">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            placeholder="请输入密码"
-            size="large"
-            :prefix-icon="Lock"
-            @keyup.enter="submit"
-          />
+          <div data-field="password" class="fld">
+            <el-input
+              v-model="form.password"
+              type="password"
+              show-password
+              placeholder="请输入密码"
+              size="large"
+              :prefix-icon="Lock"
+              @keyup.enter="submit"
+            />
+          </div>
         </el-form-item>
         <el-button type="primary" size="large" style="width:100%" :loading="loading" @click="submit">
           登录
@@ -66,6 +70,7 @@ import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authApi, safe } from '@/api'
+import { pullFields } from '@/utils/formDom'
 
 const route = useRoute()
 const router = useRouter()
@@ -79,6 +84,8 @@ const pw = reactive({ new_password: '' })
 const reason = computed(() => route.query.reason || '')
 
 async function submit() {
+  // App 内 v-model 可能漏事件：以 DOM 实际值为准（详见 utils/formDom.js）
+  pullFields(form, ['qq_account', 'password'])
   if (!form.qq_account || !form.password) { ElMessage.warning('请填写 QQ 号与密码'); return }
   loading.value = true
   try {
@@ -135,4 +142,6 @@ async function doChangePassword() {
 .links { margin-top: 16px; font-size: var(--fs-sm); display: flex; gap: 8px; justify-content: center; }
 .note { margin: 18px 0 0; line-height: 18px; }
 .mb16 { margin-bottom: 16px; }
+/* data-field 包装层：撑满表单项宽度 */
+.fld { width: 100%; }
 </style>

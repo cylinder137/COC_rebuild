@@ -46,13 +46,12 @@ export const interactApi = {
 
 /* ================= 3.4 投稿与文件 ================= */
 export const uploadApi = {
-  createProject: (d) => http.post('/projects', d),
+  createProject: (d) => http.post('/projects', d, { timeout: 60000 }),
   updateProject: (id, d) => http.put(`/projects/${id}`, d),
   init: (d) => http.post('/uploads/init', d),
   putPart: (sid, form) =>
     http.post(`/uploads/${sid}/parts`, form, {
       timeout: 0,
-      headers: { 'Content-Type': 'multipart/form-data' }
     }),
   session: (sid) => http.get(`/uploads/${sid}`),
   complete: (sid, d) => http.post(`/uploads/${sid}/complete`, d),
@@ -62,7 +61,6 @@ export const uploadApi = {
   buildRetry: (pid) => http.post(`/projects/${pid}/build/retry`),
   /** 上传/更换项目封面（multipart） */
   uploadCover: (pid, formData) => http.post(`/projects/${pid}/cover`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
   }),
   /** 移除项目封面 */
   removeCover: (pid) => http.delete(`/projects/${pid}/cover`)
@@ -109,4 +107,4 @@ export const commentsApi = {
 }
 
 /* 复用导出：api base / ws base / zone / token */
-export { safe, API_BASE, WS_BASE, ZONE, IS_USER_ZONE, getToken, setToken } from './http'
+export { safe, API_BASE, WS_BASE, ZONE, IS_USER_ZONE, ORIGIN, getToken, setToken } from './http'

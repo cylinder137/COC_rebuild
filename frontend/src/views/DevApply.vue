@@ -81,11 +81,44 @@ const showAgreement = ref(false)
 
 function agreeFromDialog() { agreed.value = true; showAgreement.value = false }
 
+/**
+ * 兜底读取：部分 Android WebView（配合祖先 user-select:none）会出现
+ * 「输入框里有字、但 input 事件没上报，v-model 仍是空」的情况，
+ * 表现就是填完点提交提示"请填写 QQ 号、密码与昵称"。
+ * 提交时以 DOM 实际值为准，模型有值优先用模型。
+ */
+function readDomValues() {
+  try {
+    const ins = [...document.querySelectorAll('.el-input__inner')].filter((e) => e.offsetParent !== null)
+    return {
+      qq_account: ins[0] ? String(ins[0].value || '').trim() : '',
+      password: ins[1] ? String(ins[1].value || '') : '',
+      nickname: ins[2] ? String(ins[2].value || '').trim() : '',
+      contact: ins[3] ? String(ins[3].value || '').trim() : '',
+    }
+  } catch (e) {
+    return { qq_account: '', password: '', nickname: '', contact: '' }
+  }
+}
+
+function isAgreed() {
+  if (agreed.value) return true
+  const cb = document.querySelector('.el-checkbox')
+  return !!(cb && cb.classList.contains('is-checked'))
+}
+
 async function submit() {
-  if (!form.qq_account || !form.password || !form.nickname) { ElMessage.warning('请填写 QQ 号、密码与昵称'); return }
-  if (!agreed.value) { ElMessage.warning('请先阅读并同意开源协议'); return }
+  const d = readDomValues()
+  const payload = {
+    qq_account: form.qq_account || d.qq_account,
+    password: form.password || d.password,
+    nickname: form.nickname || d.nickname,
+    contact: form.contact || d.contact,
+  }
+  if (!payload.qq_account || !payload.password || !payload.nickname) { ElMessage.warning('请填写 QQ 号、密码与昵称'); return }
+  if (!isAgreed()) { ElMessage.warning('请先阅读并同意开源协议'); return }
   loading.value = true
-  const r = await safe(authApi.devApply({ ...form }))
+  const r = await safe(authApi.devApply(payload))
   loading.value = false
   if (!r.ok) {
     ElMessage.error(r.error?.response?.data?.message || '提交失败，请稍后重试（后端 8090 可能未启动）')

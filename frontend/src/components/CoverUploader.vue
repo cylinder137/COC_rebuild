@@ -88,6 +88,8 @@ async function upload(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase()
   if (!OK_EXT.includes(ext)) { ElMessage.warning('封面只支持 jpg / png / webp / gif'); return }
   if (file.size > MAX) { ElMessage.warning('封面不能超过 5 MB'); return }
+  // 同类加固：没有草稿 ID 时上传必然失败，提前拦住，别让用户等一圈
+  if (!props.projectId) { ElMessage.warning('请先保存草稿，再上传封面'); return }
   clearLocal()
   localUrl.value = URL.createObjectURL(file)
   uploading.value = true

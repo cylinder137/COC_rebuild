@@ -2,20 +2,35 @@
 
 /* ---------- 文本选中策略（第五期反馈 P1） ----------
    App / 官网整体禁止选中与长按气泡，避免拖动时误选、链接高亮、原生菜单乱入；
-   需要复制的地方显式开放：输入框、代码块、.selectable（如详情栏的运行地址）。 */
+   需要复制的地方显式开放：表单控件、代码块、.mono、.selectable（详情栏运行地址）。
+
+   ⚠️ 表单控件必须用 !important + auto：
+   Android WebView 里祖先节点的 -webkit-user-select:none 会让 <input> 进入
+   "可聚焦但非编辑" 状态 —— 软键盘能敲出字，input 事件却不上报，
+   v-model 收不到值，注册页就会出现"已经填了却提示缺少账号/密码/昵称"。
+
+   ⚠️ 2026-11-15（v2.0.3）：去掉了 -webkit-user-modify: read-write。
+   它会把 input 变成"伪 contenteditable"，Android WebView 里中文输入法的
+   compositionstart 之后 compositionend 常常不触发，Element Plus 的 isComposing
+   标记就永远停在 true 并吞掉后续所有 input 事件 —— 表现和上面一模一样。
+   CSS 兜不住的部分由 utils/formDom.js 直接读 DOM 真实值解决。 */
 html, body {
   -webkit-user-select: none;
   -moz-user-select: none;
   user-select: none;
 }
 input, textarea, select,
+.el-input__inner, .el-textarea__inner, .el-input__wrapper,
 [contenteditable='true'], [contenteditable='plaintext-only'] {
-  -webkit-user-select: text;
-  user-select: text;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+  touch-action: manipulation;
 }
 pre, code, .mono, .selectable, .selectable * {
-  -webkit-user-select: text;
-  user-select: text;
+  -webkit-user-select: text !important;
+  user-select: text !important;
 }
 
 html, body, #app { height: 100%; }
@@ -113,4 +128,18 @@ a:hover { color: var(--c-primary-hover); }
 }
 @media (max-width: 991px) {
   .hide-md { display: none !important; }
+}
+
+/* 移动端：向导底部操作条吸底，避开底部 tab 栏与安全区，避免按钮被盖住点不到 */
+@media (max-width: 767px) {
+  .upload-actions {
+    position: sticky;
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
+    background: var(--c-bg, #fff);
+    padding: 10px 0;
+    margin-top: 12px;
+    border-top: 1px solid var(--c-line, rgba(0, 0, 0, 0.08));
+  }
+  .upload-actions .el-button { flex: 1; }
 }

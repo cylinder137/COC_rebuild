@@ -72,13 +72,19 @@
 
         <el-form ref="pwdRef" :model="pwd" :rules="pwdRules" label-width="92px" class="pwd-form" @submit.prevent>
           <el-form-item label="原密码" prop="old">
-            <el-input v-model="pwd.old" type="password" show-password autocomplete="current-password" placeholder="当前登录密码" />
+            <div data-field="old" class="fld">
+              <el-input v-model="pwd.old" type="password" show-password autocomplete="current-password" placeholder="当前登录密码" />
+            </div>
           </el-form-item>
           <el-form-item label="新密码" prop="next">
-            <el-input v-model="pwd.next" type="password" show-password autocomplete="new-password" placeholder="6-64 位，不能与原密码相同" />
+            <div data-field="next" class="fld">
+              <el-input v-model="pwd.next" type="password" show-password autocomplete="new-password" placeholder="6-64 位，不能与原密码相同" />
+            </div>
           </el-form-item>
           <el-form-item label="确认新密码" prop="again">
-            <el-input v-model="pwd.again" type="password" show-password autocomplete="new-password" placeholder="再输入一次" />
+            <div data-field="again" class="fld">
+              <el-input v-model="pwd.again" type="password" show-password autocomplete="new-password" placeholder="再输入一次" />
+            </div>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="pwdLoading" @click="submitPwd">修改密码</el-button>
@@ -136,6 +142,7 @@ import { authApi } from '@/api'
 import { setToken } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, useUiStore, ACCENTS } from '@/stores/ui'
+import { pullFields } from '@/utils/formDom'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -183,6 +190,8 @@ const pwdRules = {
 }
 
 async function submitPwd() {
+  // App 内 v-model 可能漏事件：先按 DOM 实际值补齐，再跑表单校验（详见 utils/formDom.js）
+  pullFields(pwd, ['old', 'next', 'again'])
   const ok = await pwdRef.value?.validate().catch(() => false)
   if (!ok) return
   pwdLoading.value = true
@@ -257,6 +266,8 @@ async function submitCancel() {
 
 .acc-info { padding: 8px 12px; border-radius: var(--r-md); background: var(--c-bg-sunken); margin: 10px 0 6px; }
 .pwd-form { margin-top: 10px; max-width: 520px; }
+/* data-field 包装层：撑满表单项宽度 */
+.fld { width: 100%; }
 .pwd-tip { margin-left: 12px; }
 
 .warn-box {

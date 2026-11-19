@@ -22,6 +22,17 @@ if (IS_APP && typeof document !== 'undefined') {
    需要确认装的是哪个包时在 WebView 控制台看 window.__COC_BUILD */
 if (typeof window !== 'undefined') {
   window.__COC_BUILD = APP_BUILD
+  // 原生壳里把未捕获异常也打到服务器日志，便于无截图排查
+  if (IS_APP) {
+    window.addEventListener('error', (e) => {
+      try { import('./api/http').then(m => m.reportClientError('window', (e.message || '') + ' @' + (e.filename || '') + ':' + (e.lineno || 0))) } catch (x) {}
+    })
+    window.addEventListener('unhandledrejection', (e) => {
+      const r = e.reason
+      const msg = r && (r.stack || r.message || r)
+      try { import('./api/http').then(m => m.reportClientError('promise', String(msg))) } catch (x) {}
+    })
+  }
 }
 
 const app = createApp(App)

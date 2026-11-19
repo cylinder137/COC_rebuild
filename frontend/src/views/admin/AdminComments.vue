@@ -25,7 +25,7 @@
       <div class="card" v-for="c in comments" :key="c.comment_id">
         <div class="row between center wrap gap8">
           <div class="row center gap8">
-            <el-avatar :size="28" :src="c.user?.avatar_path">{{ (c.user?.nickname || 'U').slice(0, 1) }}</el-avatar>
+            <el-avatar :size="28" :src="fileUrl(c.user?.avatar_path)">{{ (c.user?.nickname || 'U').slice(0, 1) }}</el-avatar>
             <span class="sm" style="font-weight:600">{{ c.user?.nickname || '匿名' }}</span>
             <el-tag v-if="c.is_author" size="small" effect="plain" type="primary">作者</el-tag>
             <span class="xs dim">{{ fmtDateTime(c.created_at) }}</span>
@@ -49,7 +49,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import { adminApi, projectApi, safe } from '@/api'
-import { fmtDateTime, pickList } from '@/utils/format'
+import { fmtDateTime, pickList, fileUrl } from '@/utils/format'
 
 const projects = ref([])
 const projectId = ref(null)

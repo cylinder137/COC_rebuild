@@ -135,7 +135,7 @@
                 :to="`/users/${a.user_id}`"
                 class="author-item"
               >
-                <el-avatar :size="30" :src="a.avatar_path">{{ (a.nickname || 'U').slice(0, 1) }}</el-avatar>
+                <el-avatar :size="30" :src="fileUrl(a.avatar_path)">{{ (a.nickname || 'U').slice(0, 1) }}</el-avatar>
                 <span class="ellipsis grow sm">{{ a.nickname }}</span>
               </router-link>
             </div>
@@ -154,7 +154,7 @@ import ProjectCard from '@/components/ProjectCard.vue'
 import AppState from '@/components/AppState.vue'
 import BizTabs from '@/components/BizTabs.vue'
 import { categoryApi, projectApi, safe } from '@/api'
-import { compactNum, pickList, pickTotal, TYPE_COLOR } from '@/utils/format'
+import { compactNum, pickList, pickTotal, TYPE_COLOR, fileUrl } from '@/utils/format'
 import { IS_APP } from '@/utils/platform'
 
 const route = useRoute()

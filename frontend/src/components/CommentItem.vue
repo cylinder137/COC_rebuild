@@ -1,6 +1,6 @@
 <template>
   <div class="c-item">
-    <el-avatar :size="36" :src="c.user?.avatar_path">
+    <el-avatar :size="36" :src="fileUrl(c.user?.avatar_path)">
       {{ (c.user?.nickname || 'U').slice(0, 1) }}
     </el-avatar>
     <div class="c-body">
@@ -32,7 +32,7 @@
       <!-- 楼中楼（一层） -->
       <div v-if="replies.length" class="c-replies">
         <div v-for="r in replies" :key="r.comment_id" class="c-reply">
-          <el-avatar :size="24" :src="r.user?.avatar_path">
+          <el-avatar :size="24" :src="fileUrl(r.user?.avatar_path)">
             {{ (r.user?.nickname || 'U').slice(0, 1) }}
           </el-avatar>
           <div class="grow">
@@ -51,7 +51,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { fmtTime } from '@/utils/format'
+import { fmtTime, fileUrl } from '@/utils/format'
 
 const props = defineProps({
   c: { type: Object, required: true },

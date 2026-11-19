@@ -6,14 +6,43 @@ import { ElMessage } from 'element-plus'
  * 这样构建产物里不写死域名 —— 官网、cn.* 中继域、App 内都可以复用同一份 dist，
  * 也顺手绕开跨域。需要指向别处（如本地直连 8090）时在 .env 里显式指定。
  */
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1'
-/** WebSocket 基址：同理按当前页面协议/主机推导 */
+/**
+ * 运行环境判定：App/Capacitor 外壳里页面源是 https://localhost，
+ * 此时同源相对路径 /api 会指向壳内部 → 全部接口 404/超时。
+ * 因此原生壳一律回落到线上绝对地址；网页端继续用同源。
+ */
+const PROD_ORIGIN = 'https://collectionofcreations.uk'
+const IS_NATIVE_SHELL = (() => {
+  try {
+    if (typeof window === 'undefined') return false
+    const cap = window.Capacitor
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) return true
+    if (window.location.protocol === 'capacitor:') return true
+    const h = window.location.hostname
+    return h === 'localhost' || h === '127.0.0.1'
+  } catch (e) {
+    return false
+  }
+})()
+const ENV_API_BASE = import.meta.env.VITE_API_BASE || ''
+const ENV_WS_BASE = import.meta.env.VITE_WS_BASE || ''
+export const API_BASE =
+  ENV_API_BASE && /^https?:\/\//i.test(ENV_API_BASE)
+    ? ENV_API_BASE
+    : IS_NATIVE_SHELL
+      ? PROD_ORIGIN + '/api/v1'
+      : (ENV_API_BASE || '/api/v1')
 export const WS_BASE =
-  import.meta.env.VITE_WS_BASE ||
-  (typeof location !== 'undefined'
-    ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
-    : '')
+  ENV_WS_BASE && /^wss?:\/\//i.test(ENV_WS_BASE)
+    ? ENV_WS_BASE
+    : IS_NATIVE_SHELL
+      ? PROD_ORIGIN.replace('https://', 'wss://')
+      : (typeof location !== 'undefined'
+        ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
+        : '')
 export const ZONE = import.meta.env.VITE_ZONE || 'main'
+/** 资源/接口的统一源：网页端为空串（同源相对），原生壳为线上绝对源 */
+export const ORIGIN = IS_NATIVE_SHELL ? PROD_ORIGIN : ''
 export const IS_USER_ZONE = ZONE === 'user'
 
 const TOKEN_KEY = 'coc_token'
@@ -26,6 +55,19 @@ export function setToken(t) {
 }
 
 const http = axios.create({ baseURL: API_BASE, timeout: 20000 })
+
+/**
+ * 轻量遥测：把前端错误以 1px 图片请求打到 nginx（只落 access.log 的 query，不写库），
+ * 目的：App 里出问题时不靠截图也能从服务器日志看到真实报错。
+ */
+export function reportClientError(kind, detail) {
+  try {
+    const d = String(detail == null ? '' : detail).slice(0, 300)
+    const url = (ORIGIN || '') + '/__coc_err?k=' + encodeURIComponent(kind) + '&d=' + encodeURIComponent(d) + '&t=' + Date.now()
+    const img = new Image()
+    img.src = url
+  } catch (e) {}
+}
 
 http.interceptors.request.use((cfg) => {
   const t = getToken()

@@ -82,10 +82,12 @@
         <div class="chat-input">
           <el-input
             v-model="draft"
+            data-field="msg_draft"
             placeholder="输入消息，Enter 发送（Shift + Enter 换行）"
             @keydown.enter.exact.prevent="send"
           />
-          <el-button type="primary" :loading="sending" :disabled="!draft.trim()" @click="send">发送</el-button>
+          <!-- 不用 :disabled：App 里 v-model 可能收不到输入，禁用态会让按钮永远点不动 -->
+          <el-button type="primary" :loading="sending" @click="send">发送</el-button>
         </div>
       </template>
       <div v-else class="chat-placeholder">
@@ -102,9 +104,10 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import { imApi, safe, WS_BASE, getToken } from '@/api'
+import { readDomField } from '@/utils/formDom'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { fmtTime, pickList } from '@/utils/format'
+import { fmtTime, pickList, fileUrl } from '@/utils/format'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -117,10 +120,10 @@ function convTitle(c) {
   if (c.kind === 2) return c.title || c.display_title || '项目群'
   return c.display_title || c.title || c.nickname || `用户 ${c.peer_user_id ?? ''}`.trim()
 }
-function convAvatar(c) { return c?.display_avatar || c?.avatar_path || '' }
+function convAvatar(c) { return fileUrl(c?.display_avatar || c?.avatar_path || '') }
 function convUnread(c) { return Number(c?.unread_count ?? c?.unread ?? 0) }
 function senderName(m) { return m?.sender_nickname || m?.sender?.nickname || '用户' }
-function senderAvatar(m) { return m?.sender_avatar || m?.sender?.avatar_path || '' }
+function senderAvatar(m) { return fileUrl(m?.sender_avatar || m?.sender?.avatar_path || '') }
 
 const convs = ref([])
 const tab = ref('')
@@ -270,6 +273,9 @@ function scrollBottom() {
 }
 
 async function send() {
+  // App 内 v-model 可能漏事件：以 DOM 实际值为准（详见 utils/formDom.js）
+  const dom = readDomField('msg_draft')
+  if (dom != null && dom !== draft.value) draft.value = dom
   const content = draft.value.trim()
   if (!content || !active.value) return
   sending.value = true

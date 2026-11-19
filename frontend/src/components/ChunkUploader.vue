@@ -178,6 +178,13 @@ function reset() {
 /** 1) init（含秒传 + 续传信息） */
 async function startUpload(isRetry) {
   if (!file.value) return
+  // 同类加固：草稿 ID 丢了（例如第 2 步没建成草稿 / 页面状态被回收）就别白传几十 MB，
+  // 后端在没有 project_id 时不会登记版本与文件，传完也是废的。
+  if (!props.projectId) {
+    state.value = 'error'
+    ElMessage.error('还没有草稿 ID：请回到第 2 步点「保存并继续」建立草稿后再上传')
+    return
+  }
   state.value = 'uploading'
   paused.value = false
   failedSet.value = new Set()
