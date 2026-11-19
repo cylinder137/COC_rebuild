@@ -12,6 +12,12 @@ import { ElMessage } from 'element-plus'
  * 因此原生壳一律回落到线上绝对地址；网页端继续用同源。
  */
 const PROD_ORIGIN = 'https://collectionofcreations.uk'
+/**
+ * 站点唯一对外源。凡是「要交给用户带走」的地址（素材直链、分享链接）都必须用它，
+ * 不能用 window.location.origin —— App 壳里那是 https://localhost，本地调试是 127.0.0.1:8084，
+ * 拼出来的链接别人打不开（五期反馈：素材链接全是 localhost）。
+ */
+export const SITE_ORIGIN = PROD_ORIGIN
 const IS_NATIVE_SHELL = (() => {
   try {
     if (typeof window === 'undefined') return false

@@ -6,7 +6,7 @@
           <h1 class="page-title">素材库</h1>
           <p class="sm dim intro">
             站内公开素材。每条都能一键复制<strong>直链</strong>，直接写进你自己的 HTML：
-            <code class="inline">&lt;img src=".../media/12/x.png"&gt;</code>
+            <code class="inline">&lt;img src="{{ siteOrigin }}/media/12/x.png"&gt;</code>
           </p>
         </div>
         <div class="row gap8">
@@ -107,8 +107,12 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import { assetApi, safe } from '@/api'
+import { SITE_ORIGIN } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { absoluteUrl, assetTypeOf, fmtSize, mediaUrlOf, pickList, pickTotal } from '@/utils/format'
+
+/** 示例文案用的完整站点源（含协议，直接就能粘进 HTML） */
+const siteOrigin = SITE_ORIGIN
 
 const auth = useAuthStore()
 const list = ref([])

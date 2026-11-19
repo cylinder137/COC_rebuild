@@ -57,6 +57,7 @@ const userMenu = [
   { label: '创作', items: [
     { title: '我的作品', path: '/me/projects', icon: 'Files' },
     { title: '投稿上传', path: '/upload', icon: 'Upload' },
+    { title: '上传素材', path: '/me/materials/upload', icon: 'UploadFilled' },
     { title: '我的素材', path: '/me/materials', icon: 'Picture' }
   ]},
   { label: '数据', items: [

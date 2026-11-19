@@ -4,6 +4,162 @@
 
 ---
 
+## 2026-11-19 · v2.1.2：素材直链统一站点源 + 新增独立「上传素材」页
+
+> 两件事都属于**「入口/链接指向错位」**：一个把用户带到了打不开的地址，一个把用户带到了不该去的页面。打包为 **2.1.2（versionCode 19）**。
+
+### 一、素材链接全是 localhost
+
+**现象**：素材库里点「复制直链」、图片右键复制地址、分享出去的素材链接，拿到手全是 `https://localhost/media/22/x.png` 或 `http://127.0.0.1:8084/media/...`，别人打不开（五期反馈）。
+
+**根因**：`utils/format.js` 的 `absoluteUrl()` 用 `window.location.origin` 补全相对路径：
+
+```js
+// 旧代码
+export function absoluteUrl(p) {
+  if (!p) return ''
+  if (!/^https?:\/\//i.test(p)) return window.location.origin + p   // ← 罪魁
+  return p
+}
+```
+
+`window.location.origin` 是「**当前页面**的源」，而当前页面有三种源，全都不是对外地址：
+
+| 环境 | `window.location.origin` | 结果 |
+| --- | --- | --- |
+| Capacitor App 壳 | `https://localhost` | 壳里根本没有 `/media` 这个路径 → 图裂、链接作废 |
+| 本地调试 | `http://127.0.0.1:8084` | 别人电脑上没有这个服务 |
+| 线上网页 | `https://collectionofcreations.uk` | 只有这一种是对的 |
+
+即「只有用户刚好在线上用网页版时才正确」，而手机端才是主场景，所以几乎必错。
+
+**修复**：在 `api/http.js` 里立一个**唯一站点源**常量，凡是「要交给用户带走的地址」一律用它，不再问浏览器：
+
+```js
+// api/http.js:14-20
+const PROD_ORIGIN = 'https://collectionofcreations.uk'
+/**
+ * 站点唯一对外源。凡是「要交给用户带走」的地址（素材直链、分享链接）都必须用它，
+ * 不能用 window.location.origin —— App 壳里那是 https://localhost，本地调试是 127.0.0.1:8084，
+ * 拼出来的链接别人打不开（五期反馈：素材链接全是 localhost）。
+ */
+export const SITE_ORIGIN = PROD_ORIGIN
+```
+
+`utils/format.js` 两处跟着改（`:58`、`:69`）：
+
+```js
+export function mediaUrlOf(a) {
+  if (!a) return ''
+  const raw = a.url ? a.url
+    : (a.asset_id && a.file_name
+      ? `/media/${a.asset_id}/${a.file_name.split('/').map(encodeURIComponent).join('/')}`
+      : '')
+  return absoluteUrl(raw)          // 统一走 absoluteUrl，不再各拼各的
+}
+
+export function absoluteUrl(p) {
+  if (!p) return ''
+  const s = String(p)
+  if (s.startsWith('data:') || s.startsWith('blob:')) return s
+  if (!/^https?:\/\//i.test(s)) return SITE_ORIGIN + (s.startsWith('/') ? s : '/' + s)
+  try {
+    const u = new URL(s)
+    // 历史数据里已经存了 localhost 的绝对地址，这里顺手改写，避免老链接继续作废
+    if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i.test(u.hostname)) {
+      return SITE_ORIGIN + u.pathname + u.search + u.hash
+    }
+    return s
+  } catch (e) { return s }
+}
+```
+
+最后那个 `URL` 改写是给**存量数据**兜底的：之前用户已经把 `http://localhost:8084/media/...` 粘进自己的 HTML 里，前端再渲染时会被就地换成线上地址。另外 `views/Assets.vue:115` 的示例文本也从 `{{ siteOrigin }}` 取常量（`:9`），让用户第一眼看到的就是完整域名，而不是 `/media/12/x.png` 这种相对路径。
+
+**验证**（三套环境，脚本在 `E:/Server Data/tmp/coc-verify/`）：
+
+| 场景 | 脚本 | 结果 |
+| --- | --- | --- |
+| 普通网页（`127.0.0.2:8084`，避开壳分支） | `link-211.cjs` | 所有 `src` 均以 `https://collectionofcreations.uk/media/` 开头，`badSrcs: []`，图片 `naturalWidth` 360/497（真加载） |
+| 模拟 Capacitor 壳（`localhost:8084`，`is-native` 生效） | `shell-211.cjs` | `isNativeClass: true`，图片仍从线上源加载成功 |
+| 真实上传一次 | `upload-flow-212.cjs` | 拿到 `https://collectionofcreations.uk/media/22/up-test.png`，`HEAD` → `200 / image/png / 50331 B` |
+
+产物层面再确认一遍：最终 bundle 里 `location.origin` 出现 **0** 次，`collectionofcreations.uk` 恰好 1 处（`BottomTabBar`、`Home` 里的域名是分享文案，本来就有）。
+
+> 关于「写死域名安不安全」：线上 nginx 只有一个 `server_name _;` 的兜底 server（配 `conf/sites/coc.conf`），没有第二个对外域名，所以固定源不会把某个域名下的访问指错。
+
+### 二、点「素材上传」直接跳到素材概览
+
+**现象**：网页版点「素材」卡 / 侧栏入口，进去是**已上传素材的列表**（概览），想上传还得自己在页面上找按钮，容易误以为「点了没反应」或「上传坏了」。
+
+**修复**：新增独立页面 `views/AssetUpload.vue`，路由与入口一起接上。
+
+| 项 | 内容 |
+| --- | --- |
+| 路由 | `router/index.js:36` → `me/materials/upload`，`name: 'asset-upload'`，`requiresAuth: true` |
+| 页面 | `views/AssetUpload.vue`：`AssetUploader` 上传区 + 「本次上传成功」清单（每条带可复制的直链）+ 用法提示卡 |
+| 向导入口 | `views/Upload.vue:320` `MATERIALS_CARD.to` 改指 `/me/materials/upload` |
+| 侧栏入口 | `layouts/ConsoleLayout.vue:60`「创作」组内新增「上传素材」（`UploadFilled` 图标），排在「我的素材」上面 |
+
+页面里的直链展示一律用 `SITE_ORIGIN`，并用 `absoluteUrl(mediaUrlOf(a))` 兜一层，保证「上传完立刻复制到手的那个链接」就是能用的对外链接：
+
+```js
+const absUrlOf = (a) => absoluteUrl(mediaUrlOf(a))
+function onDone(data) {
+  if (data?.asset_id) uploaded.value.unshift(data)   // 本次会话的新上传，置顶
+  loadSeries()
+  ElMessage.success('上传成功，可以复制直链了')
+}
+```
+
+上传成功不清空列表、只往前面插，是为了让用户「传完还能回头复制刚传的那个」；素材概览页（`/me/materials`）保持原样，负责浏览/删除/复制历史素材，两个页面的职责分开。
+
+**验证**（`uploadpage-212.cjs`，移动 390×844 + 桌面 1280×900，最终产物）：
+
+| 检查 | 暗色 | 亮色 |
+| --- | --- | --- |
+| 向导「素材」卡落点 | `/me/materials/upload` | `/me/materials/upload` |
+| 标题 | 上传素材 | 上传素材 |
+| 上传区存在 | ✔ | ✔ |
+| 提示卡存在 | ✔ | ✔ |
+| 页面底色 | `rgb(13,15,21)` | `rgb(246,247,251)` |
+| `pageerror` / `requestfailed` | 0 | 0 |
+
+侧栏导航另做了点击回归（`probe-nav3.cjs`）：`/me/materials` → 点「上传素材」→ `/me/materials/upload`（标题「上传素材」）→ 点「我的素材」→ 回到 `/me/materials`，全程 0 报错。
+
+### 三、本次涉及文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/api/http.js` | 新增 `PROD_ORIGIN` / `SITE_ORIGIN` 常量（`:14-20`） |
+| `frontend/src/utils/format.js` | `mediaUrlOf` 统一走 `absoluteUrl`（`:58`）；`absoluteUrl` 改用 `SITE_ORIGIN` 并改写本机源历史链接（`:69`） |
+| `frontend/src/views/AssetUpload.vue` | **新增**，独立上传页 |
+| `frontend/src/router/index.js` | 新增 `me/materials/upload` 路由（`:36`） |
+| `frontend/src/layouts/ConsoleLayout.vue` | 侧栏新增「上传素材」（`:60`） |
+| `frontend/src/views/Upload.vue` | 素材卡改指上传页（`:320`） |
+| `frontend/src/views/Assets.vue` | 示例文本用完整域名（`:9`、`:115`） |
+| `frontend/src/views/Downloads.vue` | 补 2.1.2 条目 |
+| `frontend/src/utils/platform.js` | `APP_BUILD` → `v2.1.2` |
+| `android/app/build.gradle` | `versionCode 19` / `versionName "2.1.2"` |
+
+### 四、发布数据
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | 2.1.2 / versionCode 19 |
+| APK | 3,891,763 B |
+| sha256 | `f897260a24b1604f27745eb59f5d9395cfc6a2c00ad536f1ab665ce4e3393b06` |
+| 前端入口 | `assets/index-CmwXZJxb.js`（dist 与 APK 内 `assets/public/index.html` 一致，已 unzip 自查） |
+
+### 五、经验
+
+1. **「给用户带走的地址」和「当前页面的地址」是两个概念。** 只要一个 URL 会被复制到别处（剪贴板、分享、写进别人 HTML），就必须用固定站点源，绝不能读 `window.location`——它在 App 壳、本地调试、线上三种环境下给出三个不同答案，而只有一个是能用的。
+2. **多环境差异要靠「常量集中」消灭，而不是靠判断分支。** 这次没有写成 `IS_NATIVE_SHELL ? prod : location.origin`，而是直接 `SITE_ORIGIN = PROD_ORIGIN`：因为本地/壳里拼出来的链接**本来就不该发给用户**，没有需要保留的场景。
+3. **入口错位类 bug 先问「这个入口想让人干什么」。** 素材概览页的职责是「看已有什么」，上传页的职责是「往里加」，合成一个页面必然有一半用户找不到北。分开之后两个入口各自直达目的，概览页也不受影响。
+4. **`a[href]` 不是万能的导航断言。** Element Plus 的 `el-menu-item` 渲染成 `<li role="menuitem">`，用 `a[href]` 查会得到「菜单项不存在」的假结论；要么按文本查 `aside .el-menu-item`，要么直接点一次看 URL 变化。
+
+---
+
 ## 2026-11-19 · v2.1.1：恢复投稿第一步的类型选择 + 修复暗色下向导操作条变白
 
 > 2.1.0 修的是「打包产物」和「按钮配色」，这次修的是**流程入口**和一个**从来没定义过的 CSS 变量**。打包为 **2.1.1（versionCode 18）**。

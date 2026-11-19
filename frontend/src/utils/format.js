@@ -1,5 +1,5 @@
 /* 项目类型 / 状态 / 数字格式化 —— 全站共用口径 */
-import { ORIGIN } from '@/api/http'
+import { ORIGIN, SITE_ORIGIN } from '@/api/http'
 
 export const TYPE_LABEL = { html: 'HTML', scratch: 'Scratch', structure: 'MC 结构', mcstructure: 'MC 结构' }
 
@@ -49,22 +49,36 @@ export function assetTypeOf(t) {
   return ASSET_TYPE[t] || { label: '文件', icon: 'Document', color: 'var(--c-text-3)' }
 }
 
-/** 素材直链（相对路径）。后端已回传 url 时直接用，否则按约定拼 */
+/** 素材直链（**绝对地址**）。
+ * 后端只回相对路径 `/media/{id}/{file}`；但这个地址的用途是「复制给用户，写进他自己的 HTML」，
+ * 所以必须是线上唯一站点源。曾经用 window.location.origin 拼：
+ *   App 壳内 → https://localhost/media/14/x.png（壳里根本没有这个文件，图裂 + 链接作废）
+ *   本地调试 → http://127.0.0.2:8084/media/... （只有本机能打开）
+ * 五期反馈「素材系统使用的链接全是 localhost」就是这个原因。 */
 export function mediaUrlOf(a) {
   if (!a) return ''
-  if (a.url) return a.url
-  if (!a.asset_id || !a.file_name) return ''
-  return `/media/${a.asset_id}/${a.file_name.split('/').map(encodeURIComponent).join('/')}`
+  const raw = a.url
+    ? a.url
+    : (a.asset_id && a.file_name
+      ? `/media/${a.asset_id}/${a.file_name.split('/').map(encodeURIComponent).join('/')}`
+      : '')
+  return absoluteUrl(raw)
 }
 
-/** 相对路径 → 绝对地址（复制给别人的链接必须是绝对地址） */
+/** 相对路径 → 线上绝对地址；顺带把本机源（localhost / 127.0.0.1）的历史链接改写到线上 */
 export function absoluteUrl(p) {
   if (!p) return ''
-  if (/^https?:\/\//i.test(p)) return p
+  const s = String(p)
+  if (s.startsWith('data:') || s.startsWith('blob:')) return s
+  if (!/^https?:\/\//i.test(s)) return SITE_ORIGIN + (s.startsWith('/') ? s : '/' + s)
   try {
-    return window.location.origin + (p.startsWith('/') ? p : '/' + p)
+    const u = new URL(s)
+    if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i.test(u.hostname)) {
+      return SITE_ORIGIN + u.pathname + u.search + u.hash
+    }
+    return s
   } catch (e) {
-    return p
+    return s
   }
 }
 

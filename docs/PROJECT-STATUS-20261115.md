@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-19 17:50（GMT+8）· 发布 v2.1.1（恢复投稿第一步类型选择 + 修复暗色下向导操作条变白），见第十五章
+> 最近更新：2026-11-19 18:30（GMT+8）· 发布 v2.1.2（素材直链统一站点源 + 新增独立「上传素材」页），见第十六章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -15,14 +15,14 @@
 | 维度 | 现状 |
 | --- | --- |
 | 仓库根 | `E:\Project Files\COC_rebuild` |
-| 分支 | `main`，HEAD `5275bda`（2026-11-19，2.1.0 已推送 `cce4cb7..5275bda`）；**2.1.1 的改动在工作区未提交** |
+| 分支 | `main`，HEAD `3615b91`（2026-11-19，2.1.1 已推送 `5275bda..3615b91`）；**2.1.2 的改动在工作区未提交** |
 | 远程 | `https://github.com/cylinder137/COC_rebuild.git`（已推送，ahead=0） |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router（`createWebHistory`） |
 | 后端 | Java 21 + Spring Boot 3.5 + MyBatis + MySQL 8 + Flyway |
 | 数据库 | `coc_platform`，**31 张表**，Flyway `V1` → `V4`（`V3__bug_feedback`、`V4__assets_and_series` 已应用） |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.1.1 / versionCode 18**（2026-11-19 17:45 打包，3,887,190 B） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.1.2 / versionCode 19**（2026-11-19 18:26 打包，3,891,763 B） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -48,7 +48,8 @@ E:\Project Files\COC_rebuild
 - 2.0.5 的改动已入库并推送（`bc3e2aa`：虚拟按键 `VirtualPad.vue` / `utils/vkeys.js` / `format.js` ORIGIN 修复）；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
 - 2.0.6 的改动已入库并推送（`cce4cb7`：素材库 + 项目/素材系列 + mcstructure 下线 + 后台 bug 反馈面板；`bc3e2aa..cce4cb7`，首次 push 遇 `OpenSSL SSL_read: unexpected eof` 重试即通）
 - 2.1.0 的改动已入库并推送（`5275bda`：EP 变量特异性修复 + 文案清理 + 下载页 2.1.0 条目 + `APP_BUILD`；`cce4cb7..5275bda`）
-- ⚠️ **2.1.1 的改动（投稿第一步类型选择恢复 + `.upload-actions` 变量修复 + 下载页 2.1.1 条目）在工作区未提交**
+- 2.1.1 的改动已入库并推送（`3615b91`：投稿第一步类型选择恢复 + `.upload-actions` 变量修复 + 下载页 2.1.1 条目；`5275bda..3615b91`）
+- ⚠️ **2.1.2 的改动（`SITE_ORIGIN` 素材直链修复 + 新增 `AssetUpload.vue` 上传页 + 路由/侧栏入口 + 下载页 2.1.2 条目）在工作区未提交**
 - 提交规范提醒：同一工作区曾出现过**并行会话**同时改 `bug_feedback` 相关文件的情况（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue` 等）。**提交前务必按路径挑拣**，别把对方未完成的改动一起 commit。
 - 下面这份清单是 11-15 的**历史快照**（`git status --porcelain` 共 28 行），仅作参考，不代表当前工作区：
 
@@ -188,6 +189,7 @@ E:\Project Files\COC_rebuild
   ├── upload             upload         投稿上传（三步向导：选类型 → 填信息存草稿 → 上传/粘贴源码 → 提交）
   ├── me/projects        me-projects    我的作品（含项目系列标签条 + 系列管理）
   ├── me/materials       me-assets      **我的素材（2.0.6 新增）**：上传 / 系列归类 / 公开性开关 / 复制直链
+  ├── me/materials/upload  asset-upload **独立「上传素材」页（2.1.2 新增）**：只负责上传 + 复制本次直链，不展示历史素材
   ├── me/dashboard       me-dashboard   数据看板
   ├── me/reports         me-reports     我的举报
   ├── messages           messages       私信
@@ -210,7 +212,8 @@ E:\Project Files\COC_rebuild
 
 ### 3.3 上传向导（Upload.vue）行为要点（排查热点）
 
-- 三步 `v-show`：`step 0` 选类型（**只剩 `html` / `scratch`**；`structure` 已于 2.0.6 下线，后端 `createDraft` 对 `project_type='structure'` 直接 400），`step 1` 填标题+简介+分类+**项目系列**+标签，`step 2` 上传/粘贴源码 + 封面 + 提交
+- 三步 `v-show`：`step 0` 选类型（**可选类型只剩 `html` / `scratch`**；`structure` 已于 2.0.6 下线，后端 `createDraft` 对 `project_type='structure'` 直接 400；第三格「素材」是**导航卡**（`.tcard.goto`，虚线框 + 箭头），点了直接去 `/me/materials/upload`，不产生 `project_type`），`step 1` 填标题+简介+分类+**项目系列**+标签，`step 2` 上传/粘贴源码 + 封面 + 提交
+- ⚠️ `step 0` **永远先出现**：本地暂存只存内容不存 `step`，`restoreDraft()` 只恢复「填过标题/简介」的草稿并高亮上次类型，绝不自动跳到第 2 步（2.1.1 修复，见第十五章）
 - `canNext = !!title.trim() && !!summary.trim()`（分类/标签非必填）；`canSubmit = 有 project_file_id 或 已有 project_id`
 - `saveDraft()` → `POST /api/v1/projects`；**该接口只写 DB，不碰存储目录**（"草稿建不出来"与 storage 无关）
 - 已加防护（11-15，v2.0.3 重做）：
@@ -270,13 +273,14 @@ E:\Project Files\COC_rebuild
   | **2.0.6** | **16** | 11-19 16:04（下线 mcstructure + 素材库 + 项目/素材系列） |
   | **2.1.0** | **17** | 11-19 17:19（手机端补齐素材库 + 修明暗模式按钮配色，五期收官） |
   | **2.1.1** | **18** | 11-19 17:45（恢复投稿第一步类型选择 + 修暗色向导操作条变白） |
+  | **2.1.2** | **19** | 11-19 18:26（素材直链统一站点源 + 新增独立「上传素材」页） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 / 2.1.0 / 2.1.1 已按此规则执行：code 13 / 14 / 15 / 16 / 17 / 18，从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 / 2.1.0 / 2.1.1 / 2.1.2 已按此规则执行：code 13 / 14 / 15 / 16 / 17 / 18 / 19，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -324,10 +328,10 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/2.1.0/2.1.1/latest`
-- 当前线上 `coc-app-2.1.1.apk` = `coc-app-latest.apk` = **3,887,190 B**（2.1.1 / code 18，签名 `CN=Collection of Creations`，sha256 `bcb26115e0e7e013a6e7147994dc7b416009ccac7309f1fe5abfd61d87f81d0a`）
-- 公网实下一致（`Content-Length: 3887190`，`cf-cache-status: BYPASS`）。⚠️ 本机验证要加 `--noproxy '*'`：`http_proxy=127.0.0.1:64070` 拉大文件会中途断，表面像 CF 截断，实为本地代理
-- `version.json` / `version.txt` 已同步为 2.1.1 / 18
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/2.1.0/2.1.1/2.1.2/latest`
+- 当前线上 `coc-app-2.1.2.apk` = `coc-app-latest.apk` = **3,891,763 B**（2.1.2 / code 19，签名 `CN=Collection of Creations`，sha256 `f897260a24b1604f27745eb59f5d9395cfc6a2c00ad536f1ab665ce4e3393b06`）
+- 公网实下一致（`content-range: bytes 0-1023/3891763`，`cf-cache-status: BYPASS`）。⚠️ 本机验证要加 `--noproxy '*'`：`http_proxy=127.0.0.1:64070` 拉大文件会中途断，表面像 CF 截断，实为本地代理。**公网 `HEAD` 请求返回空响应，别用 `-I` 判断，改用 `-r 0-1023` 看 `content-range` 的总长**
+- `version.json` / `version.txt` 已同步为 2.1.2 / 19
 
 ---
 
@@ -338,7 +342,7 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 | 1 | **App 端"无法创建项目草稿"** | ✅ **已定位并修复（v2.0.3）**：根因是输入框容器失效——App 里中文输入法打字，输入框有字但 `v-model` 收不到值，`title/summary` 恒为空，按钮 `:disabled` 死锁，请求从未发出（nginx 日志里 Android UA 零 `POST /api/v1/projects` 即为证据）。改法见第十章。**待用户装 2.0.3 实测确认** |
 | 2 | **APK 下载被 CF 链路截断** | 实测 1,015,808/3,850,562 B；下载后需校验字节数，必要时用系统浏览器/下载器重试（2.0.3 本地直连 3,853,343 B 正常，对外链路仍待验） |
 | 3 | **versionCode 回退与重复**（2.0=11 < 1.11=12；2.0.1 与 2.0.2 同为 12） | ✅ 2.0.3 已用 code=13，规则写入 5.1；后续继续 +1 |
-| 4 | 未提交改动堆积 | 2.0.3~2.1.0 已入库推送（HEAD `5275bda`）；**2.1.1 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
+| 4 | 未提交改动堆积 | 2.0.3~2.1.1 已入库推送（HEAD `3615b91`）；**2.1.2 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
 | 5 | ⚠️ **APK 打包后必须解包自检** | 2.0.6 曾因 `www/` 残留旧前端，打出的包底栏还是「MC结构」（v2.1.0 已修）。**以后每次出包都要 `unzip -p app-release.apk assets/public/index.html` 核对入口 hash 与 `frontend/dist` 一致，并确认新分包存在**，详见第十四章 |
 | 6 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
 | 7 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
@@ -985,3 +989,97 @@ border-top: 1px solid var(--c-line, rgba(0,0,0,.08)); /* --c-line 也不存在 *
 
 - 老用户 `localStorage` 里可能残留 `{project_type:'html', title:'', summary:''}`：新逻辑不会跳步、也不会高亮类型，等同于干净进入第 1 步，**无需手动清缓存**。
 - 已建成草稿（有 `project_id`）的流程完全没动：仍是 填信息 → 创建草稿 → 上传 → 自动提交。
+
+---
+
+## 十六、v2.1.2 记录（2026-11-19 18:26）· 素材直链统一站点源 + 独立「上传素材」页
+
+### 16.1 需求来源
+
+用户两条反馈，都是「入口/链接指向错位」：
+
+1. 「素材系统使用的链接全是 localhost，修复一下用 https://collectionofcreations.uk 作为 baseurl 重新测试」
+2. 「官网网页版现在点素材上传会直接跳转到素材概览界面，添加单独的素材上传界面避免界面混淆」
+
+### 16.2 关键修复一：素材直链里的 localhost
+
+**根因**：`utils/format.js` 的 `absoluteUrl()` 用 `window.location.origin` 补全相对路径。而 `window.location.origin` 是「**当前页面**的源」，三种环境给出三个答案，只有一种能用：
+
+| 环境 | `window.location.origin` | 后果 |
+| --- | --- | --- |
+| Capacitor App 壳 | `https://localhost` | 壳里没有 `/media` 路径 → 图裂、链接作废 |
+| 本地调试 | `http://127.0.0.1:8084` | 别人电脑上没有这个服务 |
+| 线上网页 | `https://collectionofcreations.uk` | 唯一正确 |
+
+手机端是主场景，所以这条几乎必错 —— 这正是「链接全是 localhost」的来源。
+
+**修复**：`api/http.js:14-20` 立唯一站点源常量，凡是「要交给用户带走」的地址一律用它：
+
+```js
+const PROD_ORIGIN = 'https://collectionofcreations.uk'
+export const SITE_ORIGIN = PROD_ORIGIN
+```
+
+`utils/format.js:58/69` 跟着改：
+
+- `mediaUrlOf(a)` 不再自己拼，统一 `return absoluteUrl(raw)`；
+- `absoluteUrl(p)` 用 `SITE_ORIGIN` 补全，并用 `new URL()` 把**存量**里 `localhost / 127.0.0.1 / 0.0.0.0 / [::1]` 的绝对地址就地改写到线上（老用户已经粘进 HTML 的坏链接因此自动痊愈）。
+
+注意这里**没有**写成 `IS_NATIVE_SHELL ? PROD_ORIGIN : location.origin`：本地或壳里拼出来的链接本来就不该发给用户，没有需要保留的场景，判断分支只会留下新的错法。
+
+**安全性**：线上 nginx 只有一个 `server_name _;` 的兜底 server（`conf/sites/coc.conf`），没有第二个对外域名，固定源不会指错。
+
+### 16.3 关键修复二：独立「上传素材」页
+
+素材概览页（`/me/materials`）职责是「看已有什么」，上传是另一件事。之前两个入口都直接落到概览页，用户得自己再找上传按钮，容易以为没反应。
+
+新增 `views/AssetUpload.vue`：`AssetUploader` 上传区 + 「本次上传成功」清单（每条带可复制直链，**只往前面插、不清空**，方便回头复制刚传的）+ 用法提示卡。页面内直链一律 `absoluteUrl(mediaUrlOf(a))`，保证「上传完立刻复制的那个链接」就是能用的对外地址。
+
+入口两处：
+
+| 入口 | 位置 | 指向 |
+| --- | --- | --- |
+| 投稿向导第三张卡 | `views/Upload.vue:320` `MATERIALS_CARD.to` | `/me/materials/upload` |
+| 控制台侧栏「创作」组 | `layouts/ConsoleLayout.vue:60`（`UploadFilled`） | `/me/materials/upload`，排在「我的素材」上面 |
+
+路由：`router/index.js:36` → `name: 'asset-upload'`，`requiresAuth: true`。概览页 `Assets.vue` 的示例文本也改用 `SITE_ORIGIN`（`:9`/`:115`），让示例第一眼就是完整域名。
+
+### 16.4 涉及文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/api/http.js` | 新增 `PROD_ORIGIN` / `SITE_ORIGIN` |
+| `frontend/src/utils/format.js` | `mediaUrlOf` 统一走 `absoluteUrl`；`absoluteUrl` 用 `SITE_ORIGIN` + 本机源改写 |
+| `frontend/src/views/AssetUpload.vue` | **新增**（独立上传页） |
+| `frontend/src/router/index.js` | 新增 `me/materials/upload` 路由 |
+| `frontend/src/layouts/ConsoleLayout.vue` | 侧栏新增「上传素材」 |
+| `frontend/src/views/Upload.vue` | 素材卡改指上传页 |
+| `frontend/src/views/Assets.vue` | 示例用完整域名 |
+| `frontend/src/utils/platform.js` | `APP_BUILD='v2.1.2'` |
+| `frontend/src/views/Downloads.vue` | 新增 2.1.2 条目（`size: 0`） |
+| `apk-build/coc-app/www/` | 重同步（`assets/index-CmwXZJxb.js`） |
+| `apk-build/coc-app/android/app/build.gradle` | `versionCode 19` / `versionName "2.1.2"` |
+
+### 16.5 发布与验证
+
+| 项 | 值 |
+| --- | --- |
+| 包大小 | 3,891,763 B |
+| sha256 | `f897260a24b1604f27745eb59f5d9395cfc6a2c00ad536f1ab665ce4e3393b06` |
+| 签名 | 证书 SHA-256 `1324f12e…2958b5`（同历史包） |
+| versionCode | 19 |
+| APK 内容自检 | `assets/public/index.html` → `assets/index-CmwXZJxb.js`，与 `frontend/dist` **完全一致**；`AssetUpload-*.js` / `AssetUploader-*.js` 均在包内；前端文件 75 个 |
+| 产物扫描 | bundle 内 `location.origin` **0 次**；`collectionofcreations.uk` 仅 `index` / `Home` / `BottomTabBar` 各 1 处（后两者是分享文案，本来就有） |
+| 本地 | `version.json`=2.1.2；APK `200 / 3891763` |
+| 公网 | `version.json`=2.1.2（`--noproxy '*'`）；APK `206 / content-range: bytes 0-1023/3891763` / `BYPASS`；首页入口 hash `index-CmwXZJxb.js` 一致；`/assets/AssetUpload-CL1m_Zw4.js` → 200 |
+| UI 自动化 | `link-211.cjs`（所有 `src` 以 prod 域名开头、`badSrcs: []`、图片真实渲染）、`shell-211.cjs`（壳分支 `isNativeClass: true` 仍取线上源）、`upload-flow-212.cjs`（真实上传 → `https://collectionofcreations.uk/media/22/up-test.png`，`HEAD 200 / image/png / 50331 B`）、`uploadpage-212.cjs`（明暗两套 + 桌面端，`pageerror`/`requestfailed` 均 0）、`probe-nav3.cjs`（侧栏双向点击跳转正常） |
+
+### 16.6 两个新增的小坑
+
+1. **公网 `curl -I` 拿不到响应头**：对 `coc-app-latest.apk` 发 `HEAD` 返回空，改用 `curl -r 0-1023 -D -` 看 `content-range` 里的总长（本次 `bytes 0-1023/3891763`）。
+2. **`a[href]` 不能用来断言侧栏菜单**：Element Plus 的 `el-menu-item` 渲染成 `<li role="menuitem">`，没有 `href`。按文本查 `aside .el-menu-item` 或直接点一次看 URL 变化，否则会得到「菜单项不存在」的假结论（本次就踩了一次）。
+
+### 16.7 回归注意
+
+- 存量素材链接里的 `localhost` / `127.0.0.1` 会在前端渲染时自动改写到线上，**不需要洗库**；但如果用户把坏链接写死在 HTML 的文本里（非 `<img src>` 等可被 `absoluteUrl` 处理的位置），仍需他自己重复制一次。
+- 素材概览页 `/me/materials` 行为未变（浏览/删除/复制历史素材）；新增页面只管上传，两者互不影响。

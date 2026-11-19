@@ -317,7 +317,7 @@ const types = [
 
 /** 第三张卡不是作品类型：素材不建项目、不进审核队列，只把用户送去素材库 */
 const MATERIALS_CARD = {
-  to: '/materials',
+  to: '/me/materials/upload',
   label: '素材',
   desc: '图片 / 视频 / 音频 / JSON，上传后复制直链',
   color: '#22c55e',

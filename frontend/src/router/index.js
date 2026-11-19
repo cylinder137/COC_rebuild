@@ -32,6 +32,8 @@ const routes = [
       { path: 'upload', name: 'upload', component: () => import('@/views/Upload.vue'), meta: { title: '投稿上传', requiresAuth: true } },
       { path: 'me/projects', name: 'me-projects', component: () => import('@/views/MeProjects.vue'), meta: { title: '我的作品', requiresAuth: true } },
       { path: 'me/materials', name: 'me-assets', component: () => import('@/views/MeAssets.vue'), meta: { title: '我的素材', requiresAuth: true } },
+      // 单独的素材上传页：从投稿向导、控制台等入口进来时，不要落到「素材概览」列表页
+      { path: 'me/materials/upload', name: 'asset-upload', component: () => import('@/views/AssetUpload.vue'), meta: { title: '上传素材', requiresAuth: true } },
       { path: 'me/dashboard', name: 'me-dashboard', component: () => import('@/views/MeDashboard.vue'), meta: { title: '数据看板', requiresAuth: true } },
       { path: 'me/reports', name: 'me-reports', component: () => import('@/views/MeReports.vue'), meta: { title: '我的举报', requiresAuth: true } },
       { path: 'messages', name: 'messages', component: () => import('@/views/Messages.vue'), meta: { title: '消息中心', requiresAuth: true } },
