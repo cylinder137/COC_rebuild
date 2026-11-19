@@ -61,6 +61,9 @@ import { fileUrl, fmtSize } from '@/utils/format'
  * size 为安装包字节数，仅用于展示。
  */
 const RELEASES = [
+  // 2.1.1 的体积留 0：最新版卡片实际读服务器 version.json，这里的 size 只是取不到接口时的兜底，
+  // 而 fmtSize(0) 显示「—」；填真实字节数反而永远慢一拍（改数字会让包体本身变几个字节）。
+  { version: '2.1.1', file: 'coc-app-2.1.1.apk', date: '2026-11-19', size: 0, note: '恢复投稿第一步类型选择（HTML / sb3 / 素材）；修复暗色下向导操作条变白条' },
   { version: '2.1.0', file: 'coc-app-2.1.0.apk', date: '2026-11-19', size: 3886681, note: '五期测试收官：手机端同步素材库（替换 MC 结构）、项目/素材系列；修复投稿按钮深浅色样式' },
   { version: '2.0.6', file: 'coc-app-2.0.6.apk', date: '2026-11-19', size: 3864440, note: '素材库替代 MC 结构板块；项目/素材系列；素材直链一键复制' },
   { version: '2.0.5', file: 'coc-app-2.0.5.apk', date: '2026-11-19', size: 3864431, note: '手机端全屏虚拟按键：双摇杆 + 自定义按键' },

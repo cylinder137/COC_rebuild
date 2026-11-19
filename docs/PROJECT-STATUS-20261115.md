@@ -1,7 +1,7 @@
 # COC 平台项目状态说明书
 
 > 生成时间：2026-11-15 21:45（GMT+8）
-> 最近更新：2026-11-19 17:25（GMT+8）· 发布 v2.1.0（手机端补齐素材库 + 修复明暗模式按钮配色，五期测试收官），见第十四章
+> 最近更新：2026-11-19 17:50（GMT+8）· 发布 v2.1.1（恢复投稿第一步类型选择 + 修复暗色下向导操作条变白），见第十五章
 > 生成者：Rivet 🔩（服务器分身）
 > 用途：交接给其他 AI / 协作者，快速建立对 COC（造物集创作平台）当前状态的整体认知
 > 所有路径均为**生产机实机路径**（Windows 11 Pro，主机 `WIN-4ODL6RU8GF2`），非示意
@@ -15,14 +15,14 @@
 | 维度 | 现状 |
 | --- | --- |
 | 仓库根 | `E:\Project Files\COC_rebuild` |
-| 分支 | `main`，HEAD `cce4cb7`（2026-11-19，2.0.6 已推送 `bc3e2aa..cce4cb7`）；**2.1.0 的改动在工作区未提交** |
+| 分支 | `main`，HEAD `5275bda`（2026-11-19，2.1.0 已推送 `cce4cb7..5275bda`）；**2.1.1 的改动在工作区未提交** |
 | 远程 | `https://github.com/cylinder137/COC_rebuild.git`（已推送，ahead=0） |
 | 前端 | Vue 3 + Vite + Element Plus + Pinia + Vue Router（`createWebHistory`） |
 | 后端 | Java 21 + Spring Boot 3.5 + MyBatis + MySQL 8 + Flyway |
 | 数据库 | `coc_platform`，**31 张表**，Flyway `V1` → `V4`（`V3__bug_feedback`、`V4__assets_and_series` 已应用） |
 | 后端端口 | `8090`（Java），打包服务 `8091`（Node / coc-packer） |
 | Web 入口 | nginx `:8084` → `https://collectionofcreations.uk` |
-| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.1.0 / versionCode 17**（2026-11-19 17:19 打包，3,886,799 B） |
+| App | Capacitor 8（`uk.collectionofcreations.coc`），当前 **2.1.1 / versionCode 18**（2026-11-19 17:45 打包，3,887,190 B） |
 | 服务化 | MySQL84 / nginx / coc-backend / coc-packer / tutor-backend / ws-server / cloudflared 全 **Running + Automatic** |
 | 隧道 | cloudflared tunnel `d84af69a-a806-445b-a2f8-19414819b30f`（cloudflared 服务化，metrics `20241`） |
 
@@ -47,7 +47,8 @@ E:\Project Files\COC_rebuild
 - 2.0.4 的改动已入库（`ec5e10e` 视图切换/全屏横屏 + `4c9acb2` 零散优化与 devlog），已推送 `ba2e3dd..4c9acb2`
 - 2.0.5 的改动已入库并推送（`bc3e2aa`：虚拟按键 `VirtualPad.vue` / `utils/vkeys.js` / `format.js` ORIGIN 修复）；nginx 侧 `coc-key-bridge.js` 与 `coc.conf` 在仓库外，已部署到生产
 - 2.0.6 的改动已入库并推送（`cce4cb7`：素材库 + 项目/素材系列 + mcstructure 下线 + 后台 bug 反馈面板；`bc3e2aa..cce4cb7`，首次 push 遇 `OpenSSL SSL_read: unexpected eof` 重试即通）
-- ⚠️ **2.1.0 的改动（EP 变量特异性修复 + 文案清理 + 下载页 2.1.0 条目 + `APP_BUILD`）在工作区未提交**
+- 2.1.0 的改动已入库并推送（`5275bda`：EP 变量特异性修复 + 文案清理 + 下载页 2.1.0 条目 + `APP_BUILD`；`cce4cb7..5275bda`）
+- ⚠️ **2.1.1 的改动（投稿第一步类型选择恢复 + `.upload-actions` 变量修复 + 下载页 2.1.1 条目）在工作区未提交**
 - 提交规范提醒：同一工作区曾出现过**并行会话**同时改 `bug_feedback` 相关文件的情况（`V3__bug_feedback.sql`、`BugFeedbackMapper/Service`、`AdminBugFeedback.vue` 等）。**提交前务必按路径挑拣**，别把对方未完成的改动一起 commit。
 - 下面这份清单是 11-15 的**历史快照**（`git status --porcelain` 共 28 行），仅作参考，不代表当前工作区：
 
@@ -268,13 +269,14 @@ E:\Project Files\COC_rebuild
   | **2.0.5** | **15** | 11-19 11:21（虚拟按键：双摇杆 + 自定义按键） |
   | **2.0.6** | **16** | 11-19 16:04（下线 mcstructure + 素材库 + 项目/素材系列） |
   | **2.1.0** | **17** | 11-19 17:19（手机端补齐素材库 + 修明暗模式按钮配色，五期收官） |
+  | **2.1.1** | **18** | 11-19 17:45（恢复投稿第一步类型选择 + 修暗色向导操作条变白） |
 
 > ⚠️ **已发现的两处版本治理问题**：
 > 1. `2.0` 的 code（11）**低于** 1.11（12）→ 从 1.11 直接升级 2.0 会被系统拒绝安装
 > 2. `2.0.2` 与 `2.0.1` code 都是 12 → 用户若已装 2.0.1，覆盖安装可能被拦
 >
 > **规则（后续必须遵守）**：每次打包 `versionCode` = 上一次 +1，**不要为了"保持版本号不变"复用 code**；需要"同版本号重发"时，至少把 code +1（如 2.0.2 → code 13）。
-> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 / 2.1.0 已按此规则执行：code 13 / 14 / 15 / 16 / 17，从任何历史版本升级都不会被拦。
+> ✅ 2.0.3 / 2.0.4 / 2.0.5 / 2.0.6 / 2.1.0 / 2.1.1 已按此规则执行：code 13 / 14 / 15 / 16 / 17 / 18，从任何历史版本升级都不会被拦。
 
 ### 5.2 App 壳工程
 
@@ -322,10 +324,10 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 
 ### 5.5 当前 APK 存货
 
-- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/2.1.0/latest`
-- 当前线上 `coc-app-2.1.0.apk` = `coc-app-latest.apk` = **3,886,799 B**（2.1.0 / code 17，签名 `CN=Collection of Creations`，sha256 `6633852f2780a6242db86702fbd625cbe1a11c1ef9fa14844f6f147052760abf`）
-- 公网实下一致（`Content-Length: 3886799`，`Cache-Control: no-store` + `cf-cache-status: BYPASS`，不会再被 CF 缓存成旧包）
-- `version.json` / `version.txt` 已同步为 2.1.0 / 17
+- 线上 `downloads\`：`coc-app-1.0/1.1/1.2/1.4-rollback/1.5/1.6/1.7/1.8/1.9/2.0/2.0.1/2.0.2/2.0.3/2.0.4/2.0.5/2.0.6/2.1.0/2.1.1/latest`
+- 当前线上 `coc-app-2.1.1.apk` = `coc-app-latest.apk` = **3,887,190 B**（2.1.1 / code 18，签名 `CN=Collection of Creations`，sha256 `bcb26115e0e7e013a6e7147994dc7b416009ccac7309f1fe5abfd61d87f81d0a`）
+- 公网实下一致（`Content-Length: 3887190`，`cf-cache-status: BYPASS`）。⚠️ 本机验证要加 `--noproxy '*'`：`http_proxy=127.0.0.1:64070` 拉大文件会中途断，表面像 CF 截断，实为本地代理
+- `version.json` / `version.txt` 已同步为 2.1.1 / 18
 
 ---
 
@@ -336,7 +338,7 @@ Copy-Item $apk.FullName 'E:\Server Data\coc-platform\downloads\coc-app-latest.ap
 | 1 | **App 端"无法创建项目草稿"** | ✅ **已定位并修复（v2.0.3）**：根因是输入框容器失效——App 里中文输入法打字，输入框有字但 `v-model` 收不到值，`title/summary` 恒为空，按钮 `:disabled` 死锁，请求从未发出（nginx 日志里 Android UA 零 `POST /api/v1/projects` 即为证据）。改法见第十章。**待用户装 2.0.3 实测确认** |
 | 2 | **APK 下载被 CF 链路截断** | 实测 1,015,808/3,850,562 B；下载后需校验字节数，必要时用系统浏览器/下载器重试（2.0.3 本地直连 3,853,343 B 正常，对外链路仍待验） |
 | 3 | **versionCode 回退与重复**（2.0=11 < 1.11=12；2.0.1 与 2.0.2 同为 12） | ✅ 2.0.3 已用 code=13，规则写入 5.1；后续继续 +1 |
-| 4 | 未提交改动堆积 | 2.0.3~2.0.6 已入库推送（HEAD `cce4cb7`）；**2.1.0 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
+| 4 | 未提交改动堆积 | 2.0.3~2.1.0 已入库推送（HEAD `5275bda`）；**2.1.1 的改动待提交**，提交前按路径挑拣（见「版本控制状态」） |
 | 5 | ⚠️ **APK 打包后必须解包自检** | 2.0.6 曾因 `www/` 残留旧前端，打出的包底栏还是「MC结构」（v2.1.0 已修）。**以后每次出包都要 `unzip -p app-release.apk assets/public/index.html` 核对入口 hash 与 `frontend/dist` 一致，并确认新分包存在**，详见第十四章 |
 | 6 | 上传首帧被踢 `/login`（store 时序） | 低优先，可加 `await auth.restore()` 后再挂路由 |
 | 7 | CF 缓存规则 / Brotli / HTTP/3 早期提示 | 需带 Zone Settings 权限的 token 或面板手开 |
@@ -878,3 +880,108 @@ cd android && ./gradlew.bat assembleRelease --no-daemon
 - 删临时构建目录 `frontend/dist.n1`（已合并并 prune）。
 - `frontend/dist-user` **未重建**：线上 nginx 已无任何 site 引用它，属历史遗留。
 - 解包校验目录 `E:/Server Data/tmp/apkchk` 用完即删。
+
+---
+
+## 十五、v2.1.1 记录（2026-11-19 17:45）· 恢复投稿类型选择 + 修暗色向导操作条
+
+### 15.1 需求来源
+
+用户实测 2.1.0 后反馈两条：
+
+1. 手机端「点进上传就直接默认上传 html 了」，要求**恢复原本的先选发布类型（HTML / sb3 文件 / 素材）再进项目草稿界面**；
+2. 草稿上传界面「上一步 / 保存并继续」的**父容器背景没跟明暗模式走**，暗主题下变成白底。
+
+### 15.2 关键修复一：一进上传就跳过类型选择
+
+**根因链**（三处叠加，全是「看起来合理」的小设计）：
+
+1. `persistDraft()` 只要没有 `project_id` 就把 `project_type` 写进 `localStorage` —— **点一下类型卡就落盘**，哪怕马上退出；
+2. `restoreDraft()` 里有一句 `if (form.project_type) step.value = 1` —— 下次进来直接推送到第 2 步，**类型选择这一步永远看不到**；
+3. `restoreDraft()` 的返回值是 `!!(form.title || form.summary)`，此时为 false → 连「已恢复上次填写」的提示都不弹。
+
+用户看到的就是「一进上传，直接是填信息的界面（html 隐式生效）」。
+
+**修复**：
+
+```js
+// persistDraft：不再记录 step（没有消费方，只会误导）
+// restoreDraft：
+const hasContent = !!(form.title || form.summary)
+if (hasContent && d.project_type) form.project_type = d.project_type
+return hasContent          // 绝不改 step
+```
+
+规则定为：**第 1 步永远先出现**；内容照常恢复；只有「填过标题/简介」的老草稿才把上次类型高亮出来让用户确认。
+
+### 15.3 关键修复二：第三张卡「素材」补回来
+
+`.type-grid` 本来就是三列布局（2.0.6 之前是 html / scratch / structure），2.0.6 下线结构文件后只剩两张卡，第三格空了 —— 入口等于丢了。补回：
+
+| 卡片 | 行为 |
+| --- | --- |
+| HTML 网页 | 选中 → 下一步（人工审核） |
+| Scratch 作品（.sb3 / .sb2） | 选中 → 下一步（免审直发） |
+| 素材 | **不参与选中**，点击 `router.push('/materials')` |
+
+- `.tcard.goto`：虚线边框 + 右上角 `→`（hover 右移 3px），跟类型卡区分；
+- 卡片下补说明：「素材不会单独成『作品』，上传后拿到直链，写进自己的 HTML 里即可引用」；
+- 页头标签改成三态：未选类型 → 「请先选择发布类型」；选 html → 「需管理员人工审核」；选 scratch → 「免审，发布后立即公开」。（原来 `project_type` 为空时 `isAutoApproved('')` 为 false，一进页面就显示「需审核」，属误导。）
+
+### 15.4 关键修复三：暗色下操作条是白底
+
+**根因**：`styles/global.css` 的 `.upload-actions` 写的是
+
+```css
+background: var(--c-bg, #fff);                      /* --c-bg 不存在 → 永远 #fff */
+border-top: 1px solid var(--c-line, rgba(0,0,0,.08)); /* --c-line 也不存在 */
+```
+
+`tokens.css` 里的背景变量只有 `--c-bg-page` / `--c-bg-subtle` / `--c-bg-sunken` / `--c-bg-card` / `--c-bg-hover`，**没有 `--c-bg`**。CSS 变量取不到就走兜底，于是浅色看着正常、深色一条白横条。`--c-line` 同样不存在，那条 8% 黑线在深色底上等于隐形。
+
+**修复**：`background: var(--c-bg-card)`（吸底条长在卡片内，底色跟卡片走）+ `border-top: 1px solid var(--c-border)`。
+
+**全站复查**：`grep -rn "var(--c-bg[,)]"` 仅此一处；其他吸底/浮层都规范使用 `--c-bg-*`。
+
+**实测**（390×844 移动视口，`getComputedStyle`）：
+
+| 取色点 | 深色 | 浅色 |
+| --- | --- | --- |
+| 操作条背景 | `rgb(21, 25, 35)` | `rgb(255, 255, 255)` |
+| 分隔线 | `rgb(42, 48, 64)` | `rgb(226, 229, 238)` |
+| 上一步 背景/文字 | `rgb(21,25,35)` / `rgb(164,172,189)` | `#fff` / `rgb(84,92,107)` |
+| 保存并继续 背景 | `rgb(108,134,255)` | `rgb(79,110,247)` |
+
+### 15.5 涉及文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/views/Upload.vue` | `MATERIALS_CARD` + 第三张跳转卡；`.tcard.goto` 样式；页头标签三态；`persistDraft` 去 `step`；`restoreDraft` 不再改 `step` |
+| `frontend/src/styles/global.css` | `.upload-actions` 改用 `--c-bg-card` / `--c-border` |
+| `frontend/src/utils/platform.js` | `APP_BUILD='v2.1.1'` |
+| `frontend/src/views/Downloads.vue` | 新增 2.1.1 条目（`size: 0`） |
+| `apk-build/coc-app/www/` | 重同步（`assets/index-RSD3QEwr.js`） |
+| `apk-build/coc-app/android/app/build.gradle` | `versionCode 18` / `versionName "2.1.1"` |
+
+### 15.6 发布与验证
+
+| 项 | 值 |
+| --- | --- |
+| 包大小 | 3,887,190 B |
+| sha256 | `bcb26115e0e7e013a6e7147994dc7b416009ccac7309f1fe5abfd61d87f81d0a` |
+| 签名 | 证书 SHA-256 `1324f12e…2958b5`（同历史包） |
+| versionCode | 18 |
+| APK 内容自检 | `assets/public/index.html` → `assets/index-RSD3QEwr.js`，与 `frontend/dist` **完全一致**；前端文件 70 个 |
+| 本地 | `version.json`=2.1.1；APK `200 / 3887190` |
+| 公网 | `version.json`=2.1.1（`--noproxy '*'`）；APK `Content-Length: 3887190` / `cf-cache-status: BYPASS`；首页 hash 一致 |
+| UI 自动化 | `E:/Server Data/tmp/coc-verify/shot-211.cjs` + `shot-211-desk.cjs`：三卡齐全、脏缓存不跳步、`nextDisabled=true`、明暗两套取色、素材卡落地 `/materials`、桌面端三列各 306px、`pageerror`/`requestfailed` 均 0 |
+
+### 15.7 两个必须记住的小坑
+
+1. **`Downloads.vue` 的 `size` 别追真实字节数**：改数字会让 chunk 内容变、包体跟着变几字节，永远差一点（2.1.0 差 118 B）。填 `0` 即可 —— `fmtSize(0)` 显示「—」，而最新版卡片运行时读 `/downloads/version.json`，真实体积由服务端 JSON 提供。
+2. **公网验证加 `--noproxy '*'`**：本机 `http_proxy=127.0.0.1:64070` 拉大文件会中途断（本次实测 26 KB / 413 KB 就停），看着像 Cloudflare 截断，其实与 CDN 无关；直连一次 `Content-Length` 就对上了。
+
+### 15.8 回归注意
+
+- 老用户 `localStorage` 里可能残留 `{project_type:'html', title:'', summary:''}`：新逻辑不会跳步、也不会高亮类型，等同于干净进入第 1 步，**无需手动清缓存**。
+- 已建成草稿（有 `project_id`）的流程完全没动：仍是 填信息 → 创建草稿 → 上传 → 自动提交。

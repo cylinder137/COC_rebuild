@@ -5,18 +5,20 @@
         <h2 class="section-title" style="margin:0">投稿上传</h2>
         <div class="sm dim">按向导三步走：选类型 → 填信息 → 传文件并提交</div>
       </div>
-      <el-tag :type="isAuto ? 'success' : 'warning'" effect="plain">
+      <el-tag v-if="form.project_type" :type="isAuto ? 'success' : 'warning'" effect="plain">
         {{ isAuto ? '该类型免审，发布后立即公开' : '该类型需管理员人工审核' }}
       </el-tag>
+      <el-tag v-else type="info" effect="plain">请先选择发布类型</el-tag>
     </div>
 
     <el-steps :active="step" finish-status="success" align-center class="mb24">
-      <el-step title="选择类型" description="HTML / Scratch" />
+      <el-step title="选择类型" description="HTML / Scratch / 素材" />
       <el-step title="填写信息" description="标题、简介、分类" />
       <el-step title="上传并提交" description="分片上传 · 支持续传" />
     </el-steps>
 
-    <!-- 步骤 1：类型 -->
+    <!-- 步骤 1：类型（必须先进这一步：不同的类型走的审核与文件形态完全不同，
+         不能让用户一进来就被默认成 html —— 见 restoreDraft 的注释） -->
     <div v-show="step === 0" class="card">
       <div class="type-grid">
         <div
@@ -35,6 +37,23 @@
             {{ t.auto ? '免审 · 直发' : '人工审核' }}
           </el-tag>
         </div>
+
+        <!-- 素材不是「作品类型」，不建项目、不进审核队列，点了直接去素材库 -->
+        <div
+          class="tcard goto"
+          @click="router.push(MATERIALS_CARD.to)"
+          :title="`去${MATERIALS_CARD.label}：${MATERIALS_CARD.desc}`"
+        >
+          <div class="t-ico" :style="{ background: MATERIALS_CARD.color + '1f', color: MATERIALS_CARD.color }">
+            <el-icon :size="24"><component :is="MATERIALS_CARD.icon" /></el-icon>
+          </div>
+          <div class="t-name">{{ MATERIALS_CARD.label }}</div>
+          <div class="xs dim">{{ MATERIALS_CARD.desc }}</div>
+          <el-tag size="small" type="info" effect="plain" class="t-tag">去上传素材</el-tag>
+        </div>
+      </div>
+      <div class="xs dim" style="margin-top:14px">
+        素材不会单独成「作品」，上传后拿到直链，写进自己的 HTML 里即可引用。
       </div>
       <div class="row" style="justify-content:flex-end;margin-top:20px">
         <el-button type="primary" :disabled="!form.project_type" @click="step = 1">下一步</el-button>
@@ -293,8 +312,17 @@ async function uploadPasted() {
 /* 五期：MC 结构板块下线（结构文件改到「素材」上传后引用直链） */
 const types = [
   { value: 'html', label: 'HTML 网页', desc: 'zip 或 html 包，可含 JS', color: 'var(--c-type-html)', icon: 'Monitor', auto: false },
-  { value: 'scratch', label: 'Scratch 作品', desc: '.sb2 / .sb3 积木项目', color: 'var(--c-type-scratch)', icon: 'Cpu', auto: true }
+  { value: 'scratch', label: 'Scratch 作品', desc: '.sb3 / .sb2 积木项目', color: 'var(--c-type-scratch)', icon: 'Cpu', auto: true }
 ]
+
+/** 第三张卡不是作品类型：素材不建项目、不进审核队列，只把用户送去素材库 */
+const MATERIALS_CARD = {
+  to: '/materials',
+  label: '素材',
+  desc: '图片 / 视频 / 音频 / JSON，上传后复制直链',
+  color: '#22c55e',
+  icon: 'Picture'
+}
 
 const isAuto = computed(() => isAutoApproved(form.project_type))
 // 只要有草稿(project_id)就允许点提交：即使刷新丢了上传状态也能提交，
@@ -335,7 +363,6 @@ function persistDraft() {
     if (form.project_id) { localStorage.removeItem(DRAFT_KEY); return }
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       v: 1,
-      step: step.value,
       project_type: form.project_type,
       title: form.title,
       summary: form.summary,
@@ -357,12 +384,19 @@ function restoreDraft() {
   try {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
     if (!d || typeof d !== 'object') return false
-    for (const k of ['project_type', 'title', 'summary', 'description', 'category_id']) {
+    for (const k of ['title', 'summary', 'description', 'category_id']) {
       if (d[k] != null && d[k] !== '') form[k] = d[k]
     }
     if (Array.isArray(d.tags)) form.tags = d.tags
-    if (form.project_type) step.value = 1
-    return !!(form.title || form.summary)
+    /* 类型只在「确实填过东西」时才恢复高亮：只点过一次卡就关掉页面留下的 project_type，
+       不该让下次进来像被默认成了 html。 */
+    const hasContent = !!(form.title || form.summary)
+    if (hasContent && d.project_type) form.project_type = d.project_type
+    /* ⚠️ 这里以前有一句 `if (form.project_type) step.value = 1`，是个隐蔽的坑：
+       暂存只要求「点过一次类型卡」就会写下 project_type，于是下次进来直接被推进第 2 步，
+       「选择类型」这一步永远看不到 —— 用户以为是「一进上传就默认成 html」。
+       现在一律回到第 1 步：内容照常恢复，之前选过的类型保持高亮，让用户自己确认一次再往下走。 */
+    return hasContent
   } catch (e) {
     return false
   }
@@ -551,6 +585,13 @@ onBeforeUnmount(() => {
 }
 .tcard:hover { border-color: var(--c-border-strong); transform: translateY(-2px); }
 .tcard.active { border-color: var(--c-primary); box-shadow: var(--sh-brand); }
+/* 第三张卡是「去素材库」的跳转入口，不是可选项：虚线边框 + 不做选中态，避免和类型卡混淆 */
+.tcard.goto { border-style: dashed; }
+.tcard.goto::after {
+  content: '→'; position: absolute; top: 16px; right: 18px;
+  font-size: 16px; color: var(--c-text-3); transition: transform var(--dur-fast) var(--ease-out);
+}
+.tcard.goto:hover::after { transform: translateX(3px); color: var(--c-text-2); }
 .t-ico { width: 46px; height: 46px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
 .t-name { font-weight: 600; font-size: var(--fs-h3); margin-bottom: 4px; }
 .t-tag { margin-top: 12px; }

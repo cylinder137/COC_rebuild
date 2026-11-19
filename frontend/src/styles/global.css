@@ -160,10 +160,14 @@ html.is-native #app {
     position: sticky;
     bottom: calc(56px + env(safe-area-inset-bottom, 0px));
     z-index: 6;
-    background: var(--c-bg, #fff);
+    /* ⚠️ 原来写的是 var(--c-bg, #fff)，而 --c-bg 这个变量在 tokens.css 里根本不存在，
+       于是永远取兜底的 #fff —— 浅色模式看不出来，深色模式就是一条白底横条压在卡片上
+       （五期反馈：暗主题下「上一步 / 保存并继续」两个按钮的背景是白的）。
+       吸底条长在卡片内部，底色必须跟卡片走：--c-bg-card；分隔线同理用 --c-border。 */
+    background: var(--c-bg-card);
     padding: 10px 0;
     margin-top: 12px;
-    border-top: 1px solid var(--c-line, rgba(0, 0, 0, 0.08));
+    border-top: 1px solid var(--c-border);
   }
   .upload-actions .el-button { flex: 1; }
 }

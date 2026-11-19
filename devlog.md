@@ -4,6 +4,117 @@
 
 ---
 
+## 2026-11-19 · v2.1.1：恢复投稿第一步的类型选择 + 修复暗色下向导操作条变白
+
+> 2.1.0 修的是「打包产物」和「按钮配色」，这次修的是**流程入口**和一个**从来没定义过的 CSS 变量**。打包为 **2.1.1（versionCode 18）**。
+
+### 一、问题一：一进「上传」就被默认成了 HTML
+
+**现象**：手机端点底栏「上传项目」进去，直接就是「填写信息」那一步，类型（HTML / sb3 / 素材）根本没得选，看起来像被默认成了 html。
+
+**根因**：`views/Upload.vue` 的本地暂存 + 恢复逻辑有三处叠加成了这个坑：
+
+```js
+// 旧代码
+function persistDraft() {                 // 只要没有 project_id 就写暂存
+  localStorage.setItem(DRAFT_KEY, JSON.stringify({ v: 1, step: step.value, project_type: form.project_type, ... }))
+}
+function restoreDraft() {
+  for (const k of [...]) if (d[k]) form[k] = d[k]
+  if (form.project_type) step.value = 1   // ← 罪魁：有类型就直接推进第 2 步
+  return !!(form.title || form.summary)
+}
+```
+
+1. 用户在第 1 步**点一下类型卡**（哪怕什么都没填、直接退出），`watch(form)` 就会把 `project_type: 'html'` 写进 `localStorage`；
+2. 下次进 `/upload`，`restoreDraft()` 命中 `project_type` → **`step.value = 1` 直接跳过类型选择**；
+3. 而且 `restoreDraft()` 返回 `!!(title||summary)` 是 false，连「已恢复上次填写」的提示都不弹 —— 用户完全无从察觉。
+
+于是「点过一次 html」就变成了永久默认，`localStorage` 不清就永远回到第 2 步。
+
+**修复**（两处，缺一不可）：
+
+```js
+// 1) 暂存不再记录 step（没人读，只是让人误以为「恢复进度」是设计好的）
+localStorage.setItem(DRAFT_KEY, JSON.stringify({ v: 1, project_type, title, summary, description, category_id, tags }))
+
+// 2) 恢复时绝不改 step；类型只在「确实填过内容」时才恢复高亮
+const hasContent = !!(form.title || form.summary)
+if (hasContent && d.project_type) form.project_type = d.project_type
+return hasContent
+```
+
+这样：内容照常恢复，但**第 1 步永远先出现**；只有「填过标题/简介」的老草稿才会把上次的类型高亮出来，让用户自己确认一次再往下走。
+
+### 二、第三张卡：「素材」
+
+类型网格本来就设计成三列（2.0.6 之前是 html / scratch / structure），2.0.6 把结构文件换成素材库后**只剩两张卡**，第三格空着，入口等于丢了。这次补回来：
+
+| 卡片 | 说明 | 行为 |
+| --- | --- | --- |
+| HTML 网页 | zip 或 html 包，可含 JS | 选中 → 下一步（人工审核） |
+| Scratch 作品 | .sb3 / .sb2 积木项目 | 选中 → 下一步（免审直发） |
+| **素材** | 图片 / 视频 / 音频 / JSON，上传后复制直链 | **不选中，点了直接 `router.push('/materials')`** |
+
+素材卡用**虚线边框 + 右上角箭头**（`.tcard.goto`）跟两张类型卡区分开，避免用户以为「素材」也是一种作品类型；卡片下方补一句「素材不会单独成『作品』，上传后拿到直链，写进自己的 HTML 里即可引用」。
+
+顺带把页头那个「该类型需管理员人工审核」的标签改成按状态显示 —— 没选类型时它显示的是「请先选择发布类型」（原来 `project_type` 为空时 `isAutoApproved('')` 为 false，一进来就提示「需审核」，纯属误导）。
+
+### 三、问题二：暗色下「上一步 / 保存并继续」的背景是白的
+
+**根因（一句话）**：`styles/global.css` 里写的是 `background: var(--c-bg, #fff)`，而 **`--c-bg` 这个变量在 `tokens.css` 里根本不存在** —— 于是永远取兜底的 `#fff`。浅色模式白底正好对，看不出来；深色模式就是一条白横条压在卡片上。
+
+```css
+/* 旧 */
+background: var(--c-bg, #fff);
+border-top: 1px solid var(--c-line, rgba(0, 0, 0, 0.08));   /* --c-line 也不存在 */
+/* 新 */
+background: var(--c-bg-card);            /* 吸底条长在卡片内部，底色必须跟卡片走 */
+border-top: 1px solid var(--c-border);
+```
+
+> `--c-border` 存在（tokens 里有明暗两套），`--c-line` 不存在 —— 顺带把这条分隔线也修了：原来那 8% 黑线在深色底上等于隐形。
+
+全站搜了一遍 `var(--c-bg[,)]`，**只有这一处**（其余都规范地用 `--c-bg-card` / `--c-bg-sunken` / `--c-bg-page`），所以不存在同批次的遗漏。
+
+**实测数值**（无头 Chromium，390×844 移动视口，`.upload-actions` 的 `getComputedStyle`）：
+
+| 取色点 | 深色 | 浅色 |
+| --- | --- | --- |
+| 操作条背景 | `rgb(21, 25, 35)` = `#151923`（= `--c-bg-card`） | `rgb(255, 255, 255)` |
+| 分隔线 | `rgb(42, 48, 64)` | `rgb(226, 229, 238)` |
+| 「上一步」背景 / 文字 | `rgb(21,25,35)` / `rgb(164,172,189)` | `#fff` / `rgb(84,92,107)` |
+| 「保存并继续」背景 | `rgb(108,134,255)` | `rgb(79,110,247)` |
+
+### 四、涉及文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/views/Upload.vue` | 类型卡加「素材」跳转卡 + `.tcard.goto` 样式；页头标签按是否已选类型显示；`persistDraft` 去掉 `step`；`restoreDraft` 不再改 `step`、类型仅在填过内容时恢复 |
+| `frontend/src/styles/global.css` | `.upload-actions` 的 `--c-bg`/`--c-line` → `--c-bg-card`/`--c-border` |
+| `frontend/src/utils/platform.js` | `APP_BUILD='v2.1.1'` |
+| `frontend/src/views/Downloads.vue` | 新增 2.1.1 条目（`size: 0`，见下） |
+| `apk-build/coc-app/android/app/build.gradle` | `versionCode 18` / `versionName "2.1.1"` |
+
+### 五、发布与验证
+
+| 项 | 值 |
+| --- | --- |
+| 包大小 | 3,887,190 B |
+| sha256 | `bcb26115e0e7e013a6e7147994dc7b416009ccac7309f1fe5abfd61d87f81d0a` |
+| 签名 | `CN=Collection of Creations`，证书 SHA-256 `1324f12e…2958b5`（同历史包） |
+| versionCode | 18（17 → 18） |
+| 内容自检 | APK 内 `assets/public/index.html` = `assets/index-RSD3QEwr.js` = `frontend/dist` ✅（70 个前端文件） |
+| 本地 / 公网 | `version.json` 均 2.1.1；APK `Content-Length: 3887190`；网页入口 hash 一致 `assets/index-RSD3QEwr.js` |
+| UI 自动化 | `E:/Server Data/tmp/coc-verify/shot-211.cjs`：3 张卡齐全、脏缓存不再跳步、`nextDisabled=true`、暗/亮两套操作条取色如上表、点素材卡落到 `/materials`、`pageerror` 与 `requestfailed` 均为 0 |
+
+### 六、两个小坑（避免下次重复）
+
+1. **`Downloads.vue` 里的 `size` 不要追真实字节数**。改数字会让 chunk 内容变、包体跟着变几个字节，永远追不上（2.1.0 就差了 118 B）。正确做法：填 `0` —— `fmtSize(0)` 返回「—」，而最新版卡片实际是 `fetch('/downloads/version.json')` 动态取的，真实体积由服务端那份 JSON 提供。2.1.0 那条记录里的 `3886681` 是历史遗留，不影响显示。
+2. **公网验证要 `--noproxy '*'`**。宿主机 `http_proxy=127.0.0.1:64070` 在拉大文件时会中途断（这次实测下到 26 KB / 413 KB 就停），看起来像 Cloudflare 截断，其实和 CDN 无关。直连后 `Content-Length` 一次就对。
+
+---
+
 ## 2026-11-19 · v2.1.0：手机端补齐素材库 + 修复明暗模式按钮配色（五期测试收官）
 
 > 这次不是新功能，而是**给 2.0.6 收尾**：用户实测反馈 2.0.6 的 APK 里「MC 结构还在、素材库没有」，同时投稿向导的按钮在深色模式下颜色不对。两条都修完后打包为 **2.1.0（versionCode 17）**，作为五期测试的收官版本。
