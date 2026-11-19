@@ -14,6 +14,7 @@ const routes = [
       { path: 'projects/:id', name: 'project-detail', component: () => import('@/views/ProjectDetail.vue'), meta: { title: '项目详情' } },
       { path: 'users/:id', name: 'user-profile', component: () => import('@/views/UserProfile.vue'), meta: { title: '个人主页' } },
       { path: 'dev-apply', name: 'dev-apply', component: () => import('@/views/DevApply.vue'), meta: { title: '开发者申请' } },
+      { path: 'downloads', name: 'downloads', component: () => import('@/views/Downloads.vue'), meta: { title: 'App 下载' } },
       { path: 'forgot', name: 'forgot', component: () => import('@/views/Forgot.vue'), meta: { title: '联系管理员' } }
     ]
   },

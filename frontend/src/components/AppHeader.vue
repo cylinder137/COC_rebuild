@@ -60,22 +60,21 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <a class="nav-item nav-download" :href="apkUrl" download>
+        <router-link class="nav-item nav-download" to="/downloads">
           <el-icon class="xs"><Download /></el-icon> 下载 App
-        </a>
+        </router-link>
       </nav>
 
       <div class="hd-right">
-        <a
+        <router-link
           v-if="!isApp"
           class="icon-btn only-sm"
-          :href="apkUrl"
-          download
+          to="/downloads"
           title="下载 App"
           aria-label="下载 App"
         >
           <el-icon><Download /></el-icon>
-        </a>
+        </router-link>
         <div v-if="!isApp" class="hd-search hide-sm" @click="focusSearch">
           <el-icon><Search /></el-icon>
           <input v-model="kw" placeholder="搜索作品、作者…" @keyup.enter="doSearch" />
@@ -118,8 +117,11 @@
 
         <template v-else>
           <router-link to="/login"><el-button size="small" round>登录</el-button></router-link>
-          <router-link v-if="!isApp" to="/dev-apply" class="hide-sm">
-            <el-button size="small" type="primary" round>注册开发者</el-button>
+          <router-link to="/dev-apply">
+            <el-button size="small" type="primary" round>
+              <span class="reg-long">注册开发者</span>
+              <span class="reg-short">注册</span>
+            </el-button>
           </router-link>
         </template>
       </div>
@@ -135,7 +137,6 @@ import { useThemeStore, useUiStore } from '@/stores/ui'
 import { categoryApi, safe, IS_USER_ZONE } from '@/api'
 import { IS_APP, APP_BUILD } from '@/utils/platform'
 import { fileUrl } from '@/utils/format'
-import { ORIGIN } from '@/api'
 
 const auth = useAuthStore()
 const theme = useThemeStore()
@@ -152,13 +153,6 @@ const isUserZone = IS_USER_ZONE
 const isApp = IS_APP
 /** App 里的构建标记，用来一眼确认装的是不是新包 */
 const buildTag = APP_BUILD
-/**
- * 下载地址：带 ?v=<发布号> 做缓存穿透。
- * Cloudflare 会把 /downloads/coc-app-latest.apk 缓存在边缘（max-age=3600），
- * 换包后不清缓存就会出现「下到的还是旧版本」，加查询串即视为新 URL（2026-11-15）。
- */
-const APK_RELEASE = '2.0.3'
-const apkUrl = `${ORIGIN}/downloads/coc-app-latest.apk?v=${APK_RELEASE}`
 
 /** 回退上一步；没有历史时回首页 */
 function goBack() {
@@ -290,6 +284,18 @@ function onCommand(cmd) {
 }
 .icon-btn:hover { color: var(--c-primary); border-color: var(--c-primary-border); }
 .avatar-btn { cursor: pointer; display: flex; }
+/* 窄屏 / App 内顶栏拥挤：注册按钮只显示「注册」，保证与「登录」并排可见 */
+.reg-short { display: none; }
+.hd.native .reg-long { display: none; }
+.hd.native .reg-short { display: inline; }
+@media (max-width: 767px) {
+  .reg-long { display: none; }
+  .reg-short { display: inline; }
+  /* 登录 + 注册两个按钮并排后空间紧张：品牌只留图标，间距收紧 */
+  .brand-name { display: none; }
+  .hd-inner { gap: 10px; }
+  .hd-right { gap: 8px; }
+}
 /* 窄屏时顶栏导航整体隐藏，下载入口改由 hd-right 的图标按钮接管（手机才是装 App 的主要场景） */
 .only-sm { display: none; }
 @media (max-width: 991px) {

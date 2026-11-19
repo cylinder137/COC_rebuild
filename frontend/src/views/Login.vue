@@ -32,14 +32,17 @@
             />
           </div>
         </el-form-item>
-        <el-button type="primary" size="large" style="width:100%" :loading="loading" @click="submit">
-          登录
-        </el-button>
+        <div class="auth-actions">
+          <el-button type="primary" size="large" :loading="loading" @click="submit">
+            登录
+          </el-button>
+          <el-button size="large" @click="goRegister">
+            注册开发者
+          </el-button>
+        </div>
       </el-form>
 
       <div class="links">
-        <router-link to="/dev-apply">申请成为开发者</router-link>
-        <span class="dim">·</span>
         <router-link to="/forgot">忘记密码？联系管理员</router-link>
       </div>
 
@@ -98,9 +101,19 @@ async function submit() {
     goLanding()
   } catch (e) {
     // axios 封装已统一提示（审核中 / 已注销 / 密码错误）
+    // 账号或密码错误（401）：大概率还没注册，自动引导到注册页
+    if (e?.http401) {
+      setTimeout(() => goRegister(), 600)
+    }
   } finally {
     loading.value = false
   }
+}
+
+/** 去注册（开发者申请）；带上已填的 QQ 号方便续填 */
+function goRegister() {
+  const qq = form.qq_account.trim()
+  router.push({ path: '/dev-apply', query: qq ? { qq_account: qq } : {} })
 }
 
 /** 按 user.type 决定落地页：2 → 我的作品/回跳；3 → 管理后台 */
@@ -140,6 +153,10 @@ async function doChangePassword() {
 .brand-row { display: flex; align-items: center; gap: 12px; margin: 18px 0 22px; }
 .brand-title { font-size: 19px; font-weight: 700; }
 .links { margin-top: 16px; font-size: var(--fs-sm); display: flex; gap: 8px; justify-content: center; }
+/* 登录 / 注册两个按钮同尺寸通栏，仅颜色区分主次 */
+.auth-actions { display: flex; flex-direction: column; gap: 12px; }
+.auth-actions :deep(.el-button) { width: 100%; }
+.auth-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .note { margin: 18px 0 0; line-height: 18px; }
 .mb16 { margin-bottom: 16px; }
 /* data-field 包装层：撑满表单项宽度 */

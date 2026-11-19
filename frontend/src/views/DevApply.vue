@@ -70,10 +70,17 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { authApi, safe } from '@/api'
 
-const form = reactive({ qq_account: '', password: '', nickname: '', contact: '' })
+const route = useRoute()
+const form = reactive({
+  qq_account: String(route.query.qq_account || ''),
+  password: '',
+  nickname: '',
+  contact: ''
+})
 const agreed = ref(false)
 const loading = ref(false)
 const done = ref(false)

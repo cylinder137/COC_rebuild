@@ -16,6 +16,15 @@ import { IS_APP, APP_BUILD } from './utils/platform'
 /* App 内打个标记：原生层已经做了安全区让位，CSS 侧不再重复补 */
 if (IS_APP && typeof document !== 'undefined') {
   document.documentElement.classList.add('is-native')
+  /* 固定渲染宽度：禁止双指缩放把页面拉到屏幕外（横向滚动由 global.css 的
+     html.is-native 规则整体禁用，内容按设备宽度贴合渲染） */
+  const vp = document.querySelector('meta[name="viewport"]')
+  if (vp) {
+    vp.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+    )
+  }
 }
 
 /* 构建版本号挂到 window：App 顶栏按需求不再显示标题，

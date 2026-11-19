@@ -2,7 +2,7 @@ import http, { safe } from './http'
 /* ================= 3.1 认证 ================= */
 export const authApi = {
   devApply: (d) => http.post('/auth/dev-apply', d),
-  login: (d) => http.post('/auth/login', d),
+  login: (d) => http.post('/auth/login', d, { skipAuthRedirect: true }),
   me: () => http.get('/auth/me'),
   changePassword: (d) => http.post('/auth/change-password', d),
   cancelAccount: (d) => http.post('/auth/cancel-account', d),

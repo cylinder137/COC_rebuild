@@ -113,6 +113,30 @@ a:hover { color: var(--c-primary-hover); }
   *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
 }
 
+/* ---------- App 内视口锁定（html.is-native 由 main.js 打标） ----------
+   整页固定为屏幕宽度：任何比屏幕宽的元素都不产生页面级横向滚动，
+   宽表格 / 横向卡片列表仍在各自容器内滚动（不影响内部 scroll 容器）。
+   overflow-x: clip 不建立滚动容器，避免 sticky 顶栏失效；hidden 给老内核兜底。 */
+html.is-native,
+html.is-native body,
+html.is-native #app {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+/* App 窄屏下固定宽度弹窗（如 640px 协议弹窗）会撑出横向滚动，统一收窄到屏幕内 */
+@media (max-width: 767px) {
+  html.is-native .el-dialog,
+  html.is-native .el-message-box {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 /* 底部 tab 栏占位：窄屏时内容不能被它盖住（含 iPhone 手势条 / Android 导航键安全区）
    高度必须和 BottomTabBar 的 56px + safe-area 对齐，否则最后一行内容会被遮住 */
 @media (max-width: 767px) {

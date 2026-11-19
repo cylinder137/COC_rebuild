@@ -91,6 +91,12 @@ http.interceptors.response.use(
   (err) => {
     const status = err?.response?.status
     const msg = err?.response?.data?.message
+    // 登录接口自身返回 401（账号或密码错误）不触发「登录已失效」跳转，
+    // 由调用方决定后续动作（如引导去注册）
+    if (status === 401 && err.config?.skipAuthRedirect) {
+      if (!err.config?.silent) ElMessage.error(msg || '账号或密码错误')
+      return Promise.reject(Object.assign(err, { code: 401, http401: true }))
+    }
     if (status === 401) {
       setToken('')
       if (!redirecting) {
