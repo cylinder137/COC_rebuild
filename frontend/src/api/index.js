@@ -5,6 +5,7 @@ export const authApi = {
   login: (d) => http.post('/auth/login', d),
   me: () => http.get('/auth/me'),
   changePassword: (d) => http.post('/auth/change-password', d),
+  cancelAccount: (d) => http.post('/auth/cancel-account', d),
   forgot: (d) => http.post('/auth/password/forgot', d)
 }
 

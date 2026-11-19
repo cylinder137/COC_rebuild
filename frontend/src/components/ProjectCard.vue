@@ -46,9 +46,10 @@
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { compactNum, fmtTime, statusOf, TYPE_COLOR, fileUrl, runUrlOf } from '@/utils/format'
 import { acquire, release } from '@/utils/liveSlots'
+import { useUiStore } from '@/stores/ui'
 
 const props = defineProps({
   p: { type: Object, required: true },
@@ -56,8 +57,10 @@ const props = defineProps({
   showReason: { type: Boolean, default: false }
 })
 
+const ui = useUiStore()
 const imgErr = ref(false)
 const live = ref(false)
+const visible = ref(false)
 let io = null
 let cardEl = null
 
@@ -85,27 +88,34 @@ const reason = computed(() => props.p.down_reason || props.p.reject_reason || pr
 const pid = computed(() => props.p.project_id ?? props.p.id)
 const liveUrl = computed(() => runUrlOf(pid.value))
 
-/** 只有已发布 + 可运行类型才尝试实时预览 */
+/** 只有已发布 + 可运行类型才尝试实时预览；设置页关掉「自动加载」时一律不加载 */
 const canLive = computed(() => {
+  if (!ui.autoLoad) return false
   if (!pid.value) return false
   if (props.p.status !== undefined && props.p.status !== 2) return false
   return ['html', 'scratch'].includes(type.value)
 })
 
 onMounted(() => {
-  if (!canLive.value) return
   cardEl = getCurrentInstance()?.proxy?.$el || null
   if (!cardEl) return
   io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
-        if (e.isIntersecting) wantsPreview()
+        visible.value = e.isIntersecting
+        if (e.isIntersecting && canLive.value) wantsPreview()
         else dropPreview()
       }
     },
     { threshold: 0.5, rootMargin: '80px' }
   )
   io.observe(cardEl)
+})
+
+// 设置页开关实时生效：关掉立刻卸载 iframe，打开且卡片在视野内则重新加载
+watch(canLive, (v) => {
+  if (!v) dropPreview()
+  else if (visible.value) wantsPreview()
 })
 
 onBeforeUnmount(() => {
@@ -142,12 +152,15 @@ onBeforeUnmount(() => {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 7px; border-radius: var(--r-pill);
   background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; line-height: 1.6;
+  pointer-events: none;
 }
 .live-badge i { width: 6px; height: 6px; border-radius: 50%; background: #34d399; }
 .overlay {
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;
   align-items: center; justify-content: center; color: #fff;
   background: rgba(0, 0, 0, .45); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
+  /* 纯装饰层：不能吞掉点击（P1「组件不可选中」防御修复） */
+  pointer-events: none;
 }
 .pcard:hover .overlay { opacity: 1; }
 .play {

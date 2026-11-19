@@ -26,6 +26,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     /** 必须登录（METHOD:ANT 模式） */
     private static final List<String> LOGIN_REQUIRED = List.of(
             "POST:/api/v1/auth/change-password",
+            "POST:/api/v1/auth/cancel-account",
             "GET:/api/v1/auth/me",
             "POST:/api/v1/comments",
             "POST:/api/v1/comments/*/like",

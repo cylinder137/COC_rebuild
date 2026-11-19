@@ -31,7 +31,8 @@ const routes = [
       { path: 'me/projects', name: 'me-projects', component: () => import('@/views/MeProjects.vue'), meta: { title: '我的作品', requiresAuth: true } },
       { path: 'me/dashboard', name: 'me-dashboard', component: () => import('@/views/MeDashboard.vue'), meta: { title: '数据看板', requiresAuth: true } },
       { path: 'me/reports', name: 'me-reports', component: () => import('@/views/MeReports.vue'), meta: { title: '我的举报', requiresAuth: true } },
-      { path: 'messages', name: 'messages', component: () => import('@/views/Messages.vue'), meta: { title: '消息中心', requiresAuth: true } }
+      { path: 'messages', name: 'messages', component: () => import('@/views/Messages.vue'), meta: { title: '消息中心', requiresAuth: true } },
+      { path: 'settings', name: 'settings', component: () => import('@/views/Settings.vue'), meta: { title: '设置', requiresAuth: true } }
     ]
   },
 

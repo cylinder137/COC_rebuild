@@ -66,7 +66,8 @@ const userMenu = [
   ]},
   { label: '账号', items: [
     { title: '我的举报', path: '/me/reports', icon: 'Warning' },
-    { title: '联系管理员', path: '/forgot', icon: 'Service' }
+    { title: '联系管理员', path: '/forgot', icon: 'Service' },
+      { title: '设置', path: '/settings', icon: 'Setting' }
   ]}
 ]
 

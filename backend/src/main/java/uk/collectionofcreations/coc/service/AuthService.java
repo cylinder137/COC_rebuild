@@ -181,6 +181,35 @@ public class AuthService {
         return data;
     }
 
+    /** 账号注销（自助）：校验登录密码 → status=3 软注销；作品保留，昵称展示为「用户已注销」 */
+    @Transactional
+    public Map<String, Object> cancelAccount(Map<String, Object> body) {
+        Long uid = AuthContext.requireUserId();
+        String pwd = Params.requireStr(body, "password", "登录密码");
+        String reason = Params.str(body, "reason");
+        Map<String, Object> user = userMapper.findAuthById(uid);
+        if (user == null) {
+            throw BizException.notFound("用户不存在");
+        }
+        int type = ((Number) user.get("type")).intValue();
+        if (type == 3) {
+            throw BizException.badRequest("管理员账号不能自助注销，请先移交管理权限");
+        }
+        Map<String, Object> full = userMapper.findByQq(String.valueOf(user.get("qq_account")));
+        if (full == null || !encoder.matches(pwd, String.valueOf(full.get("password_hash")))) {
+            throw BizException.badRequest("密码不正确，无法注销账号");
+        }
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("user_id", uid);
+        p.put("cancel_reason", (reason == null || reason.isBlank()) ? "用户自助注销" : reason.trim());
+        userMapper.cancelUser(p);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("user_id", uid);
+        data.put("status", 3);
+        data.put("message", "账号已注销；作品保留，昵称展示为「用户已注销」");
+        return data;
+    }
+
     /** 忘记密码 → 提交找回申请（管理员人工处理） */
     @Transactional
     public Map<String, Object> forgotPassword(Map<String, Object> body) {

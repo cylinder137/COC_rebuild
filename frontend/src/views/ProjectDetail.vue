@@ -46,12 +46,24 @@
                   </button>
                 </div>
 
-                <div class="viewer-body">
+                <div ref="bodyRef" class="viewer-body" :class="{ 'is-scaled': needScale }">
                   <!-- 审核中 / 下架 / 结构类型：不给 iframe -->
                   <div v-if="!canRun" class="viewer-fallback">
                     <el-icon :size="38" class="dim"><component :is="fallbackIcon" /></el-icon>
                     <div class="fb-title">{{ fallbackTitle }}</div>
                     <div class="fb-desc xs dim">{{ fallbackDesc }}</div>
+                  </div>
+                  <div v-else-if="needScale" class="frame-scale-holder" :style="holderStyle">
+                    <iframe
+                      :key="frameKey"
+                      :src="runUrl"
+                      class="frame frame-base"
+                      :style="frameStyle"
+                      sandbox="allow-scripts"
+                      referrerpolicy="no-referrer"
+                      :title="`项目预览：${detail.title}`"
+                    />
+                    <span class="scale-hint xs">电脑端 1280×720 渲染 · 等比缩放</span>
                   </div>
                   <iframe
                     v-else
@@ -281,7 +293,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
@@ -348,8 +360,40 @@ const canRun = computed(() => {
   if (d.status !== 2) return false
   return ['html', 'scratch'].includes(d.project_type)
 })
-const fallbackIcon = computed(() => {
-  const s = detail.value?.status
+/* ---------------- P1：手机端 HTML 预览按电脑端布局渲染后整体缩放 ----------------
+   手机上直接给 iframe 一个窄视口，HTML 作品会按手机断点重排（甚至挤成单列）。
+   这里固定 1280×720 渲染（等于电脑端视口），再用 transform: scale() 等比缩到容器宽度，
+   既保留作者的原始布局，又不会出现横向滚动条。仅对 html 类型生效。 */
+const BASE_W = 1280
+const BASE_H = 720
+const bodyRef = ref(null)
+const frameScale = ref(1)
+const isNarrow = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
+let scaleRO = null
+const needScale = computed(() => canRun.value && isNarrow.value && detail.value?.project_type === 'html')
+const holderStyle = computed(() => ({ height: `${Math.round(BASE_H * frameScale.value)}px` }))
+const frameStyle = computed(() => ({
+  width: `${BASE_W}px`,
+  height: `${BASE_H}px`,
+  transform: `scale(${frameScale.value})`,
+  transformOrigin: 'top left'
+}))
+function updateScale() {
+  const el = bodyRef.value
+  if (!el) return
+  const w = el.clientWidth || 0
+  if (!w) return
+  let s = w / BASE_W
+  const h = el.clientHeight || 0
+  if (isFull.value && h > 0) s = Math.min(s, h / BASE_H)
+  frameScale.value = Math.max(0.2, Math.min(s, 2))
+}
+function syncNarrow() {
+  isNarrow.value = window.innerWidth < 768
+  nextTick(updateScale)
+}
+
+const fallbackIcon = computed(() => {  const s = detail.value?.status
   if (s === 3) return 'CircleCloseFilled'
   if (s === 1) return 'Clock'
   if (detail.value?.project_type === 'structure') return 'Box'
@@ -639,16 +683,29 @@ function copyLink() {
 function onKey(e) {
   if (e.key === 'Escape' && isFull.value) isFull.value = false
 }
-watch(isFull, (v) => { document.body.style.overflow = v ? 'hidden' : '' })
+watch(isFull, (v) => {
+  document.body.style.overflow = v ? 'hidden' : ''
+  nextTick(updateScale)
+})
+watch(needScale, () => nextTick(updateScale))
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
+  window.addEventListener('resize', syncNarrow, { passive: true })
+  syncNarrow()
+  if (bodyRef.value && typeof ResizeObserver !== 'undefined') {
+    scaleRO = new ResizeObserver(() => updateScale())
+    scaleRO.observe(bodyRef.value)
+  }
   load()
   const r = await safe(categoryApi.list())
   if (r.ok && Array.isArray(r.data)) categories.value = r.data
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
+  window.removeEventListener('resize', syncNarrow)
+  scaleRO?.disconnect()
+  scaleRO = null
   document.body.style.overflow = ''
 })
 </script>
@@ -679,6 +736,15 @@ onUnmounted(() => {
 }
 .viewer.fullscreen .viewer-bar { height: 48px; padding-top: env(safe-area-inset-top, 0px); }
 .viewer-body { position: relative; padding-top: min(62.5%, 58vh); }
+/* 手机端缩放模式：高度由内联 style 按 scale 给出，不再用 padding-top 撑 */
+.viewer-body.is-scaled { padding-top: 0; background: #fff; overflow: hidden; }
+.frame-scale-holder { position: relative; width: 100%; overflow: hidden; }
+.frame-base { left: 0; top: 0; }
+.scale-hint {
+  position: absolute; right: 8px; bottom: 6px; padding: 1px 8px;
+  border-radius: var(--r-pill); background: rgba(0, 0, 0, .45); color: #fff;
+  pointer-events: none; opacity: .75;
+}
 .viewer.fullscreen .viewer-body { padding-top: 0; flex: 1; }
 .frame {
   position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff;

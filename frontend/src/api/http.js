@@ -1,9 +1,18 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-export const API_BASE =
-  import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8090/api/v1'
-export const WS_BASE = import.meta.env.VITE_WS_BASE || 'ws://127.0.0.1:8090'
+/**
+ * API 基址：默认走同源 /api（nginx 反代到后端）。
+ * 这样构建产物里不写死域名 —— 官网、cn.* 中继域、App 内都可以复用同一份 dist，
+ * 也顺手绕开跨域。需要指向别处（如本地直连 8090）时在 .env 里显式指定。
+ */
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1'
+/** WebSocket 基址：同理按当前页面协议/主机推导 */
+export const WS_BASE =
+  import.meta.env.VITE_WS_BASE ||
+  (typeof location !== 'undefined'
+    ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
+    : '')
 export const ZONE = import.meta.env.VITE_ZONE || 'main'
 export const IS_USER_ZONE = ZONE === 'user'
 

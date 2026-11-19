@@ -61,6 +61,12 @@ public class AuthController {
         return ApiResponse.ok(authService.forgotPassword(body));
     }
 
+    /** 账号注销（本人自助，需校验登录密码）：status=3 软注销，作品保留 */
+    @PostMapping("/auth/cancel-account")
+    public ApiResponse<Map<String, Object>> cancelAccount(@RequestBody(required = false) Map<String, Object> body) {
+        return ApiResponse.ok(authService.cancelAccount(body == null ? new java.util.LinkedHashMap<>() : body));
+    }
+
     /** 退出登录（JWT 无状态，仅前端清 token；此处提供占位接口） */
     @PostMapping("/auth/logout")
     public ApiResponse<Map<String, Object>> logout() {

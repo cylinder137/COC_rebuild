@@ -1,5 +1,23 @@
 * { box-sizing: border-box; }
 
+/* ---------- 文本选中策略（第五期反馈 P1） ----------
+   App / 官网整体禁止选中与长按气泡，避免拖动时误选、链接高亮、原生菜单乱入；
+   需要复制的地方显式开放：输入框、代码块、.selectable（如详情栏的运行地址）。 */
+html, body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+input, textarea, select,
+[contenteditable='true'], [contenteditable='plaintext-only'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+pre, code, .mono, .selectable, .selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 html, body, #app { height: 100%; }
 
 body {
