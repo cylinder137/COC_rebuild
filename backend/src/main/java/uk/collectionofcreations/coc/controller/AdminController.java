@@ -252,6 +252,13 @@ public class AdminController {
         return ApiResponse.ok(adminService.setAdmin(userId, FileController.clientIp(request)));
     }
 
+    /** 撤销管理员（type=3 → 2） */
+    @PostMapping("/users/{user_id}/revoke-admin")
+    public ApiResponse<Map<String, Object>> revokeAdmin(@PathVariable("user_id") long userId,
+                                                        HttpServletRequest request) {
+        return ApiResponse.ok(adminService.revokeAdmin(userId, FileController.clientIp(request)));
+    }
+
     // ---- 统计 / 日志 ----
 
     @GetMapping("/stats/platform")

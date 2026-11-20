@@ -31,10 +31,11 @@
         <el-table-column label="最近登录" width="170">
           <template #default="{ row }">{{ fmtDateTime(row.last_login_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="290" fixed="right">
+        <el-table-column label="操作" width="370" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" text @click="resetPw(row)">重置密码</el-button>
             <el-button size="small" type="warning" text :disabled="row.type === 3 || row.status === 3" @click="setAdmin(row)">设为管理员</el-button>
+            <el-button size="small" type="info" text :disabled="row.type !== 3 || isSelf(row)" @click="revokeAdmin(row)">撤销管理员</el-button>
             <el-button size="small" type="danger" text :disabled="row.status === 3" @click="cancel(row)">注销账号</el-button>
           </template>
         </el-table-column>
@@ -133,8 +134,25 @@ async function setAdmin(row) {
       { type: 'warning', confirmButtonText: '确认设置', cancelButtonText: '取消' }
     )
     const r = await safeApi(adminApi.setAdmin(row.user_id))
-    if (!r.ok) { ElMessage.error('操作失败'); return }
+    if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '操作失败'); return }
     ElMessage.success('已设为管理员'); load()
+  } catch (e) {}
+}
+
+async function revokeAdmin(row) {
+  try {
+    if (isSelf(row)) {
+      ElMessage.warning('不能撤销自己的管理员权限（会把自己锁在门外）')
+      return
+    }
+    await ElMessageBox.confirm(
+      `确认撤销 QQ ${row.qq_account}${row.nickname ? '（' + row.nickname + '）' : ''} 的管理员权限？撤销后该账号立即失去管理后台访问能力。`,
+      '撤销管理员',
+      { type: 'warning', confirmButtonText: '确认撤销', confirmButtonClass: 'el-button--danger', cancelButtonText: '取消' }
+    )
+    const r = await safeApi(adminApi.revokeAdmin(row.user_id))
+    if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '操作失败'); return }
+    ElMessage.success('已撤销管理员权限'); load()
   } catch (e) {}
 }
 
