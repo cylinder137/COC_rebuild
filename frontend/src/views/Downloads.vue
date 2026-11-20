@@ -63,7 +63,8 @@ import { fileUrl, fmtSize } from '@/utils/format'
 const RELEASES = [
   // 最新版的体积留 0：最新版卡片实际读服务器 version.json，这里的 size 只是取不到接口时的兜底，
   // 而 fmtSize(0) 显示「—」；填真实字节数反而永远慢一拍（改数字会让包体本身变几个字节）。
-  { version: '2.1.3', file: 'coc-app-2.1.3.apk', date: '2026-11-20', size: 0, note: '手机端虚拟摇杆优化：方波微调 + 摇杆吸附 + 切后台自动松键' },
+  { version: '2.1.4', file: 'coc-app-2.1.4.apk', date: '2026-11-20', size: 0, note: '管理端 Bug 反馈增删改查 + 设为管理员；详情页复制链接修正' },
+  { version: '2.1.3', file: 'coc-app-2.1.3.apk', date: '2026-11-20', size: 3892574, note: '手机端虚拟摇杆优化：方波微调 + 摇杆吸附 + 切后台自动松键' },
   { version: '2.1.2', file: 'coc-app-2.1.2.apk', date: '2026-11-19', size: 3891763, note: '素材直链改为固定公网源（修复 App 内外链接都是 localhost）' },
   { version: '2.1.1', file: 'coc-app-2.1.1.apk', date: '2026-11-19', size: 0, note: '恢复投稿第一步类型选择（HTML / sb3 / 素材）；修复暗色下向导操作条变白条' },
   { version: '2.1.0', file: 'coc-app-2.1.0.apk', date: '2026-11-19', size: 3886681, note: '五期测试收官：手机端同步素材库（替换 MC 结构）、项目/素材系列；修复投稿按钮深浅色样式' },
