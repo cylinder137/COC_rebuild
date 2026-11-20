@@ -89,13 +89,38 @@
       </ul>
 
       <div v-if="selected" class="vp-sliders">
+        <!-- 自绘滑块：不用 el-slider。它在 rotate/scale 的舞台里用 AABB 宽度当分母，
+             旋转后水平轨道的包围盒宽度变成「厚度」，导致拖一点数值就暴跳。
+             这里实时测两端锚点的屏幕坐标，把指针投影到轨道真实方向上，全屏/旋转/缩放都精确。 -->
         <div class="vp-slider">
           <span>透明度 <b>{{ Math.round(selected.opacity * 100) }}%</b></span>
-          <el-slider v-model="selected.opacity" :min="0.15" :max="1" :step="0.05" size="small" :show-tooltip="false" />
+          <div
+            class="vps-track"
+            @pointerdown="sliderDown($event, 'opacity', 0.15, 1, 0.05, 'op')"
+            @pointermove="sliderMove"
+            @pointerup="sliderUp"
+            @pointercancel="sliderUp"
+          >
+            <i class="vps-anchor a" data-sk="opA" />
+            <i class="vps-anchor b" data-sk="opB" />
+            <span class="vps-fill" :style="{ width: sliderPct('opacity', 0.15, 1) + '%' }" />
+            <span class="vps-thumb" :style="{ left: sliderPct('opacity', 0.15, 1) + '%' }" />
+          </div>
         </div>
         <div class="vp-slider">
           <span>尺寸 <b>{{ Math.round(selected.size) }}px</b></span>
-          <el-slider v-model="selected.size" :min="44" :max="180" :step="4" size="small" :show-tooltip="false" />
+          <div
+            class="vps-track"
+            @pointerdown="sliderDown($event, 'size', 44, 180, 4, 'sz')"
+            @pointermove="sliderMove"
+            @pointerup="sliderUp"
+            @pointercancel="sliderUp"
+          >
+            <i class="vps-anchor a" data-sk="szA" />
+            <i class="vps-anchor b" data-sk="szB" />
+            <span class="vps-fill" :style="{ width: sliderPct('size', 44, 180) + '%' }" />
+            <span class="vps-thumb" :style="{ left: sliderPct('size', 44, 180) + '%' }" />
+          </div>
         </div>
       </div>
       <p v-else class="vp-tip">未选中元素：点一下摇杆或按键即可调它的透明度 / 尺寸。</p>
@@ -417,6 +442,60 @@ function onBlankDown() {
   if (props.editing) selId.value = ''
 }
 
+/* ---------------- 自绘滑块（旋转/缩放安全的坐标映射） ----------------
+   不用 el-slider：它在被 CSS rotate 的舞台里，用 getBoundingClientRect().width
+   当分母算百分比。水平轨道旋转 90° 后，包围盒的 width 变成轨道「厚度」（很窄），
+   于是指针 x 方向稍微一动，delta/width 就被放大几十倍 —— 这正是「拖一点数值暴跳」的根因。
+   做法：轨道两端各放一个零宽锚点，实时取它们的屏幕中心点 A/B，把指针位置投影到
+   向量 AB 上得到 0~1 的比例。因为用的是屏幕实际坐标，scale / rotate / 全屏都精确。 */
+const activeSlider = ref(null)
+
+function sliderPct(key, min, max) {
+  const n = selected.value
+  if (!n) return 0
+  return clamp(((n[key] - min) / (max - min)) * 100, 0, 100)
+}
+
+function sliderGeom(track) {
+  const a = track.querySelector('.vps-anchor.a')?.getBoundingClientRect()
+  const b = track.querySelector('.vps-anchor.b')?.getBoundingClientRect()
+  if (!a || !b) return null
+  return {
+    ax: a.left + a.width / 2, ay: a.top + a.height / 2,
+    vx: (b.left + b.width / 2) - (a.left + a.width / 2),
+    vy: (b.top + b.height / 2) - (a.top + a.height / 2)
+  }
+}
+
+function applySlider(e, s) {
+  const g = sliderGeom(s.track)
+  const n = selected.value
+  if (!g || !n) return
+  const len2 = g.vx * g.vx + g.vy * g.vy
+  if (len2 < 1) return
+  const t = clamp(((e.clientX - g.ax) * g.vx + (e.clientY - g.ay) * g.vy) / len2, 0, 1)
+  let v = s.min + t * (s.max - s.min)
+  v = s.min + Math.round((v - s.min) / s.step) * s.step
+  n[s.key] = clamp(Number(v.toFixed(4)), s.min, s.max)
+}
+
+function sliderDown(e, key, min, max, step, sk) {
+  if (e.pointerType === 'mouse' && e.button > 0) return
+  e.preventDefault()
+  e.stopPropagation()
+  const track = e.currentTarget
+  try { track.setPointerCapture(e.pointerId) } catch (err) { /* 老 WebView 忽略 */ }
+  activeSlider.value = { pid: e.pointerId, key, min, max, step, track }
+  applySlider(e, activeSlider.value)
+}
+function sliderMove(e) {
+  const s = activeSlider.value
+  if (s && s.pid === e.pointerId) applySlider(e, s)
+}
+function sliderUp(e) {
+  if (activeSlider.value && activeSlider.value.pid === e.pointerId) activeSlider.value = null
+}
+
 /* ---------------- 设置面板 ---------------- */
 function addField(field) {
   const f = normalizeField(field)
@@ -667,10 +746,31 @@ defineExpose({ releaseAll, scheme })
   font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px;
 }
 .vp-sliders { margin-top: 8px; }
-.vp-slider { margin-bottom: 2px; }
-.vp-slider span { font-size: 11px; color: rgba(238, 243, 250, 0.7); }
+.vp-slider { margin-bottom: 10px; }
+.vp-slider > span { display: block; font-size: 11px; color: rgba(238, 243, 250, 0.7); margin-bottom: 6px; }
 .vp-slider b { color: #fff; font-weight: 600; }
-.vp-slider :deep(.el-slider) { --el-slider-height: 4px; }
+/* 自绘滑块轨道：百分比定位的填充/手柄会随舞台 transform 一起正确变换 */
+.vps-track {
+  position: relative; height: 18px; cursor: pointer; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+.vps-track::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px;
+  transform: translateY(-50%); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.vps-anchor { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
+.vps-anchor.a { left: 0; }
+.vps-anchor.b { right: 0; }
+.vps-fill {
+  position: absolute; left: 0; top: 50%; height: 4px; transform: translateY(-50%);
+  border-radius: 999px; background: var(--c-primary, #4c8dff); pointer-events: none;
+}
+.vps-thumb {
+  position: absolute; top: 50%; width: 14px; height: 14px; margin-left: -7px;
+  transform: translateY(-50%); border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); pointer-events: none;
+}
 .vp-reset {
   width: 100%; margin-top: 8px; padding: 6px; border-radius: 8px; cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.18); background: transparent; color: rgba(238, 243, 250, 0.75);

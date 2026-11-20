@@ -119,4 +119,54 @@ public class ProjectController {
     public ApiResponse<Map<String, Object>> removeCover(@PathVariable("project_id") long projectId) {
         return ApiResponse.ok(projectService.removeCover(projectId));
     }
+
+    // ---- 作者自助管理（我的作品页完整增删改查） ----
+
+    /** 作者改标题/简介/描述/分类/标签（任意状态，已发布即时生效） */
+    @PutMapping("/projects/{project_id}/mine")
+    public ApiResponse<Map<String, Object>> updateMine(@PathVariable("project_id") long projectId,
+                                                       @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(projectService.updateMine(projectId, body));
+    }
+
+    /** 作者下架作品 */
+    @PostMapping("/projects/{project_id}/down")
+    public ApiResponse<Map<String, Object>> downMine(@PathVariable("project_id") long projectId,
+                                                     @RequestBody(required = false) Map<String, Object> body) {
+        return ApiResponse.ok(projectService.downMine(projectId, body == null ? null : Params.str(body, "reason")));
+    }
+
+    /** 作者恢复上架 */
+    @PostMapping("/projects/{project_id}/restore")
+    public ApiResponse<Map<String, Object>> restoreMine(@PathVariable("project_id") long projectId) {
+        return ApiResponse.ok(projectService.restoreMine(projectId));
+    }
+
+    /** 作者删除作品（软删） */
+    @DeleteMapping("/projects/{project_id}")
+    public ApiResponse<Map<String, Object>> deleteMine(@PathVariable("project_id") long projectId,
+                                                       @RequestBody(required = false) Map<String, Object> body) {
+        return ApiResponse.ok(projectService.deleteMine(projectId, body == null ? null : Params.str(body, "reason")));
+    }
+
+    /** 把已有作品加入项目系列（可指定已有 series_id，或给 new_series_name 新建一个） */
+    @PostMapping("/projects/{project_id}/series")
+    public ApiResponse<Map<String, Object>> attachSeries(@PathVariable("project_id") long projectId,
+                                                         @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(projectService.attachSeries(projectId, body));
+    }
+
+    /** 作者在线查看自己的源码文本文件（文本附带内容） */
+    @GetMapping("/projects/{project_id}/source-files")
+    public ApiResponse<Map<String, Object>> mySourceFiles(@PathVariable("project_id") long projectId) {
+        return ApiResponse.ok(projectService.mySourceFiles(projectId));
+    }
+
+    /** 作者在线保存源码文本文件修改 */
+    @PutMapping("/projects/{project_id}/source-files")
+    public ApiResponse<Map<String, Object>> saveMySource(@PathVariable("project_id") long projectId,
+                                                         @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(projectService.saveMySource(projectId,
+                Params.str(body, "rel"), Params.str(body, "content")));
+    }
 }

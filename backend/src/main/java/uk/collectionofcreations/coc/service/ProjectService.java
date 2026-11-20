@@ -8,9 +8,16 @@ import uk.collectionofcreations.coc.common.Params;
 import uk.collectionofcreations.coc.mapper.CategoryMapper;
 import uk.collectionofcreations.coc.mapper.ImMapper;
 import uk.collectionofcreations.coc.mapper.InteractionMapper;
+import uk.collectionofcreations.coc.mapper.LogMapper;
 import uk.collectionofcreations.coc.mapper.ProjectMapper;
 import uk.collectionofcreations.coc.mapper.ViewMapper;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +38,13 @@ public class ProjectService {
     private static final Set<String> RETIRED_TYPES = Set.of("structure");
     private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00");
+    /** 列表代码预览：最多读入口文件前 1400 字符，纯静态展示、不执行，省用户端算力 */
+    private static final int PREVIEW_CHARS = 1400;
+    /** 可在线编辑的源码文本后缀 */
+    private static final Set<String> TEXT_EXT = Set.of(
+            "html", "htm", "css", "js", "json", "txt", "xml", "svg", "md", "yml", "yaml",
+            "py", "java", "c", "cpp", "h", "cs", "php", "go", "rs", "sh");
+    private static final long MAX_EDIT_BYTES = 2L * 1024 * 1024;
 
     private final ProjectMapper projectMapper;
     private final CategoryMapper categoryMapper;
@@ -40,11 +54,13 @@ public class ProjectService {
     private final FileService fileService;
     private final SeriesService seriesService;
     private final uk.collectionofcreations.coc.storage.StorageService storageService;
+    private final LogMapper logMapper;
 
     public ProjectService(ProjectMapper projectMapper, CategoryMapper categoryMapper, ViewMapper viewMapper,
                           InteractionMapper interactionMapper, ImMapper imMapper, FileService fileService,
                           SeriesService seriesService,
-                          uk.collectionofcreations.coc.storage.StorageService storageService) {
+                          uk.collectionofcreations.coc.storage.StorageService storageService,
+                          LogMapper logMapper) {
         this.projectMapper = projectMapper;
         this.categoryMapper = categoryMapper;
         this.viewMapper = viewMapper;
@@ -53,6 +69,7 @@ public class ProjectService {
         this.fileService = fileService;
         this.seriesService = seriesService;
         this.storageService = storageService;
+        this.logMapper = logMapper;
     }
 
     // ---------------- 封面 ----------------
@@ -182,6 +199,15 @@ public class ProjectService {
         }
         List<Map<String, Object>> list = projectMapper.listPublished(q);
         long total = projectMapper.countPublished(q);
+        // 代码预览：浏览页传 include_preview=1 时，给每张卡附上入口文件的静态片段（不运行项目）。
+        // 用参数参与缓存 key（cacheKey 由 q.toString 生成），带/不带预览各缓存一份，互不污染。
+        if (Params.bool(q, "include_preview")) {
+            for (Map<String, Object> item : list) {
+                Object idv = item.get("project_id");
+                if (idv == null) continue;
+                item.put("code_preview", codePreview(((Number) idv).longValue()));
+            }
+        }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("list", list);
         data.put("total", total);
@@ -189,6 +215,40 @@ public class ProjectService {
         data.put("size", size);
         HotCache.put(cacheKey, data, 20_000L);
         return data;
+    }
+
+    /**
+     * 入口源码的静态预览片段（只读取、不执行），供列表卡片展示。
+     * 优先运行目录 build 的入口，其次 source；读不到就返回空串，绝不影响列表主流程。
+     */
+    private String codePreview(long projectId) {
+        try {
+            Map<String, Object> version = projectMapper.findLatestVersion(projectId);
+            if (version == null) return "";
+            int vno = ((Number) version.get("version_no")).intValue();
+            Path base = storageService.getRoot().resolve("projects")
+                    .resolve(String.valueOf(projectId)).resolve("v" + vno);
+            Path dir = base.resolve("build");
+            String entry = fileService.resolveRunEntry(dir);
+            if (entry == null) {
+                dir = base.resolve("source");
+                entry = fileService.resolveRunEntry(dir);
+            }
+            if (entry == null) return "";
+            Path file = dir.resolve(entry).normalize();
+            if (!file.startsWith(dir.normalize()) || !Files.isRegularFile(file)) return "";
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                char[] buf = new char[1024];
+                int n;
+                while (sb.length() < PREVIEW_CHARS && (n = r.read(buf)) != -1) {
+                    sb.append(buf, 0, Math.min(n, PREVIEW_CHARS - sb.length()));
+                }
+            }
+            return sb.toString();
+        } catch (Exception ignore) {
+            return "";
+        }
     }
 
     public Map<String, Object> detail(long projectId) {
@@ -615,5 +675,267 @@ public class ProjectService {
             throw BizException.badRequest("只有草稿或已拒绝的项目可以编辑");
         }
         return project;
+    }
+
+    // ===================================================================
+    // 作者自助管理（我的作品页完整增删改查）—— 需求 1
+    // ===================================================================
+
+    /** 作者本人的项目（未删除，任意状态）：改标题/简介/分类/标签，已发布也能改元信息 */
+    private Map<String, Object> requireOwnAny(long projectId, long uid) {
+        Map<String, Object> project = projectMapper.findProjectById(projectId);
+        if (project == null || ((Number) project.get("is_deleted")).intValue() == 1) {
+            throw BizException.notFound("项目不存在");
+        }
+        if (((Number) project.get("author_id")).longValue() != uid) {
+            throw BizException.forbidden("只有作者本人可以操作");
+        }
+        return project;
+    }
+
+    /** 作者修改项目的标题 / 简介 / 描述 / 分类 / 标签（不改状态，已发布作品即时生效） */
+    @Transactional
+    public Map<String, Object> updateMine(long projectId, Map<String, Object> body) {
+        long uid = AuthContext.requireUserId();
+        Map<String, Object> project = requireOwnAny(projectId, uid);
+        String title = Params.str(body, "title", String.valueOf(project.get("title")));
+        if (title == null || title.trim().isEmpty()) throw BizException.badRequest("标题不能为空");
+        if (title.length() > 100) throw BizException.badRequest("标题过长（<=100 字）");
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("project_id", projectId);
+        p.put("title", title.trim());
+        p.put("summary", Params.str(body, "summary", (String) project.get("summary")));
+        p.put("description", Params.str(body, "description", (String) project.get("description")));
+        p.put("project_type", String.valueOf(project.get("project_type")));
+        Object cat = body.containsKey("category_id") ? body.get("category_id") : project.get("category_id");
+        p.put("category_id", cat == null || "".equals(cat) ? null : cat);
+        projectMapper.updateProjectBasic(p);
+        if (body.containsKey("tags")) {
+            categoryMapper.deleteProjectTags(projectId);
+            saveTags(projectId, body.get("tags"));
+        }
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_update_project", projectId, "作者修改作品元信息：《" + title + "》");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("updated", true);
+        return data;
+    }
+
+    /** 作者下架自己的已发布作品（status 2 → 3） */
+    @Transactional
+    public Map<String, Object> downMine(long projectId, String reason) {
+        long uid = AuthContext.requireUserId();
+        Map<String, Object> project = requireOwnAny(projectId, uid);
+        int status = ((Number) project.get("status")).intValue();
+        if (status != 2) throw BizException.badRequest("只有已发布的作品可以下架");
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("project_id", projectId);
+        p.put("reason", (reason == null || reason.trim().isEmpty()) ? "作者主动下架" : reason.trim());
+        projectMapper.downProject(p);
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_down_project", projectId, "作者下架作品：《" + project.get("title") + "》");
+        return Map.of("project_id", projectId, "status", 3);
+    }
+
+    /** 作者重新上架自己已下架的作品（status 3 → 2） */
+    @Transactional
+    public Map<String, Object> restoreMine(long projectId) {
+        long uid = AuthContext.requireUserId();
+        Map<String, Object> project = requireOwnAny(projectId, uid);
+        int status = ((Number) project.get("status")).intValue();
+        if (status != 3) throw BizException.badRequest("只有已下架的作品可以恢复上架");
+        projectMapper.restoreProject(projectId);
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_restore_project", projectId, "作者恢复上架：《" + project.get("title") + "》");
+        return Map.of("project_id", projectId, "status", 2);
+    }
+
+    /** 作者删除自己的作品（软删，保留文件，可联系管理员恢复） */
+    @Transactional
+    public Map<String, Object> deleteMine(long projectId, String reason) {
+        long uid = AuthContext.requireUserId();
+        Map<String, Object> project = requireOwnAny(projectId, uid);
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("project_id", projectId);
+        p.put("reason", (reason == null || reason.trim().isEmpty()) ? "作者主动删除" : reason.trim());
+        projectMapper.softDeleteProject(p);
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_delete_project", projectId, "作者删除作品：《" + project.get("title") + "》");
+        return Map.of("project_id", projectId, "deleted", true);
+    }
+
+    /** 把已有作品加入某个项目系列（新建系列走 create；这里只做挂载 + 校验归属） */
+    @Transactional
+    public Map<String, Object> attachSeries(long projectId, Map<String, Object> body) {
+        long uid = AuthContext.requireUserId();
+        Map<String, Object> project = requireOwnAny(projectId, uid);
+        Long seriesId = Params.lng(body, "series_id");
+        String newName = Params.str(body, "new_series_name");
+        if (seriesId == null && (newName == null || newName.isBlank())) {
+            throw BizException.badRequest("请选择系列或填写新系列名称");
+        }
+        if (seriesId == null) {
+            seriesId = seriesService.ensureByName(SeriesService.Kind.PROJECT, uid, newName, Params.bool(body, "is_public"));
+        } else {
+            seriesService.requireOwn(SeriesService.Kind.PROJECT, seriesId, uid);
+        }
+        seriesService.attach(SeriesService.Kind.PROJECT, seriesId, projectId, uid);
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_attach_series", projectId, "作品加入系列 #" + seriesId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("series_id", seriesId);
+        return data;
+    }
+
+    /** 在线列出作者本人项目的源码文本文件（文本附带内容，供「改代码」用） */
+    public Map<String, Object> mySourceFiles(long projectId) {
+        long uid = AuthContext.requireUserId();
+        requireOwnAny(projectId, uid);
+        return readSourceFiles(projectId);
+    }
+
+    /** 在线保存作者对源码文本文件的修改 */
+    @Transactional
+    public Map<String, Object> saveMySource(long projectId, String rel, String content) {
+        long uid = AuthContext.requireUserId();
+        requireOwnAny(projectId, uid);
+        Map<String, Object> res = writeSourceFile(projectId, rel, content);
+        HotCache.invalidate("projects:");
+        selfLog(uid, "self_edit_source", projectId, "作者在线编辑源码: " + rel);
+        return res;
+    }
+
+    // ---- 源码读写内部实现（与管理员端同构，鉴权在调用方） ----
+
+    private Map<String, Object> readSourceFiles(long projectId) {
+        Map<String, Object> version = projectMapper.findLatestVersion(projectId);
+        List<Map<String, Object>> files = new ArrayList<>();
+        Path sourceDir = null;
+        if (version != null) {
+            int vno = ((Number) version.get("version_no")).intValue();
+            sourceDir = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId))
+                    .resolve("v" + vno).resolve("source");
+        }
+        Map<String, Map<String, Object>> dbByRel = new LinkedHashMap<>();
+        for (Map<String, Object> f : projectMapper.listFilesByProject(projectId)) {
+            Path p = storageService.resolveStored(String.valueOf(f.get("storage_path")));
+            if (p == null) continue;
+            String rel = sourceDir != null && p.normalize().startsWith(sourceDir.normalize())
+                    ? sourceDir.relativize(p.normalize()).toString().replace('\\', '/')
+                    : p.getFileName().toString();
+            dbByRel.put(rel, f);
+        }
+        if (sourceDir != null && Files.isDirectory(sourceDir)) {
+            List<Path> paths = new ArrayList<>();
+            try (var walk = Files.walk(sourceDir)) {
+                walk.filter(Files::isRegularFile).forEach(paths::add);
+            } catch (IOException e) {
+                throw BizException.badRequest("读取源码目录失败: " + e.getMessage());
+            }
+            paths.sort((a, b) -> a.toString().compareTo(b.toString()));
+            for (Path p : paths) {
+                files.add(sourceFileEntry(sourceDir.relativize(p.normalize()).toString().replace('\\', '/'),
+                        p, dbByRel.get(sourceDir.relativize(p.normalize()).toString().replace('\\', '/'))));
+            }
+        } else {
+            for (Map.Entry<String, Map<String, Object>> e : dbByRel.entrySet()) {
+                Path p = storageService.resolveStored(String.valueOf(e.getValue().get("storage_path")));
+                if (p != null && Files.exists(p)) files.add(sourceFileEntry(e.getKey(), p, e.getValue()));
+            }
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("files", files);
+        return data;
+    }
+
+    private Map<String, Object> sourceFileEntry(String rel, Path p, Map<String, Object> db) {
+        Map<String, Object> x = new LinkedHashMap<>();
+        long size = 0L;
+        try { size = Files.size(p); } catch (IOException ignored) {}
+        String ext = extOf(p.getFileName().toString());
+        boolean text = TEXT_EXT.contains(ext);
+        x.put("rel", rel);
+        x.put("file_name", p.getFileName().toString());
+        x.put("ext", ext);
+        x.put("size", size);
+        x.put("editable", text && size <= MAX_EDIT_BYTES);
+        x.put("file_id", db == null ? null : db.get("project_file_id"));
+        String content = null;
+        if (text && size <= MAX_EDIT_BYTES) {
+            try {
+                byte[] bytes = Files.readAllBytes(p);
+                if (!hasNul(bytes)) content = new String(bytes, StandardCharsets.UTF_8);
+            } catch (IOException ignored) {}
+        }
+        x.put("content", content);
+        return x;
+    }
+
+    private Map<String, Object> writeSourceFile(long projectId, String rel, String content) {
+        Map<String, Object> version = projectMapper.findLatestVersion(projectId);
+        if (version == null) throw BizException.badRequest("项目尚无版本文件，无法在线编辑");
+        int vno = ((Number) version.get("version_no")).intValue();
+        Path sourceDir = storageService.getRoot().resolve("projects").resolve(String.valueOf(projectId))
+                .resolve("v" + vno).resolve("source");
+        if (rel == null || rel.isBlank() || rel.contains("..") || rel.startsWith("/")) {
+            throw BizException.badRequest("非法路径");
+        }
+        Path target = sourceDir.resolve(rel).normalize();
+        if (!target.startsWith(sourceDir.normalize())) throw BizException.forbidden("非法路径");
+        if (!Files.exists(target) || Files.isDirectory(target)) throw BizException.notFound("文件不存在: " + rel);
+        String ext = extOf(target.getFileName().toString());
+        if (!TEXT_EXT.contains(ext)) throw BizException.badRequest("该文件类型不可在线编辑");
+        byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_EDIT_BYTES) throw BizException.badRequest("文件超过 2MB，不可在线编辑");
+        try {
+            Files.write(target, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        } catch (IOException e) {
+            throw BizException.badRequest("写入失败: " + e.getMessage());
+        }
+        for (Map<String, Object> f : projectMapper.listFilesByProject(projectId)) {
+            Path p = storageService.resolveStored(String.valueOf(f.get("storage_path")));
+            if (p != null && p.normalize().equals(target)) {
+                Map<String, Object> upd = new LinkedHashMap<>();
+                upd.put("project_file_id", f.get("project_file_id"));
+                upd.put("file_size", (long) bytes.length);
+                try { upd.put("sha256", storageService.sha256(target)); } catch (IOException e) { upd.put("sha256", null); }
+                projectMapper.updateFileMeta(upd);
+                break;
+            }
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("project_id", projectId);
+        data.put("rel", rel);
+        data.put("size", (long) bytes.length);
+        data.put("saved", true);
+        return data;
+    }
+
+    private String extOf(String name) {
+        int i = name.lastIndexOf('.');
+        return i >= 0 && i < name.length() - 1 ? name.substring(i + 1).toLowerCase() : "";
+    }
+
+    private boolean hasNul(byte[] b) {
+        for (byte x : b) if (x == 0) return true;
+        return false;
+    }
+
+    private void selfLog(long uid, String action, long projectId, String detail) {
+        try {
+            Map<String, Object> log = new LinkedHashMap<>();
+            log.put("admin_id", uid);
+            log.put("action", action);
+            log.put("target_type", "project");
+            log.put("target_id", projectId);
+            log.put("detail", detail);
+            log.put("ip", null);
+            logMapper.insertLog(log);
+        } catch (Exception ignore) {
+            // 审计失败不阻断主操作
+        }
     }
 }

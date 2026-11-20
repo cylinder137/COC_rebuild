@@ -1,26 +1,36 @@
 <template>
   <router-link :to="`/projects/${p.project_id ?? p.id}`" class="pcard hoverable">
     <div class="thumb" :style="{ borderTopColor: typeColor }">
-      <!-- 进入视野后自动加载真实运行页面（沙箱 iframe），点击仍走项目主页 -->
-      <div v-if="live" class="live-frame">
-        <iframe
-          :src="liveUrl"
-          sandbox="allow-scripts"
-          referrerpolicy="no-referrer"
-          tabindex="-1"
-          aria-hidden="true"
-        />
-      </div>
-      <img v-else-if="cover" :src="cover" :alt="p.title" loading="lazy" @error="imgErr = true" />
-      <div v-else class="thumb-ph" :style="{ background: phBg }">
-        <span class="ph-txt">{{ (p.title || '?').slice(0, 1) }}</span>
-      </div>
-
-      <span v-if="live" class="live-badge"><i />实时预览</span>
+      <!-- 代码预览模式：只渲染入口源码片段，不运行项目（省用户端算力） -->
+      <template v-if="noRun">
+        <pre v-if="codePreview" class="code-peek"><code>{{ codePreview }}</code></pre>
+        <img v-else-if="cover" :src="cover" :alt="p.title" loading="lazy" @error="imgErr = true" />
+        <div v-else class="thumb-ph" :style="{ background: phBg }">
+          <span class="ph-txt">{{ (p.title || '?').slice(0, 1) }}</span>
+        </div>
+        <span v-if="codePreview" class="live-badge code-badge"><i />代码预览</span>
+      </template>
+      <!-- 实时运行模式（详情页等需要真跑的地方）：进入视野后加载沙箱 iframe -->
+      <template v-else>
+        <div v-if="live" class="live-frame">
+          <iframe
+            :src="liveUrl"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"
+            tabindex="-1"
+            aria-hidden="true"
+          />
+        </div>
+        <img v-else-if="cover" :src="cover" :alt="p.title" loading="lazy" @error="imgErr = true" />
+        <div v-else class="thumb-ph" :style="{ background: phBg }">
+          <span class="ph-txt">{{ (p.title || '?').slice(0, 1) }}</span>
+        </div>
+        <span v-if="live" class="live-badge"><i />实时预览</span>
+      </template>
       <span class="type-bar" :style="{ background: typeColor }" />
       <div class="overlay">
         <div class="play"><el-icon :size="18"><VideoPlay /></el-icon></div>
-        <span class="xs">试玩</span>
+        <span class="xs">{{ noRun ? '查看项目' : '试玩' }}</span>
       </div>
       <el-tag v-if="showStatus" :type="st.type" size="small" class="status-tag" effect="dark">
         {{ st.label }}
@@ -54,7 +64,11 @@ import { useUiStore } from '@/stores/ui'
 const props = defineProps({
   p: { type: Object, required: true },
   showStatus: { type: Boolean, default: false },
-  showReason: { type: Boolean, default: false }
+  showReason: { type: Boolean, default: false },
+  /** 代码预览片段（静态文本，不执行）：有值则展示代码缩略图 */
+  codePreview: { type: String, default: '' },
+  /** true=只做代码预览、不运行项目（列表页省算力） */
+  noRun: { type: Boolean, default: false }
 })
 
 const ui = useUiStore()
@@ -90,6 +104,7 @@ const liveUrl = computed(() => runUrlOf(pid.value))
 
 /** 只有已发布 + 可运行类型才尝试实时预览；设置页关掉「自动加载」时一律不加载 */
 const canLive = computed(() => {
+  if (props.noRun) return false
   if (!ui.autoLoad) return false
   if (!pid.value) return false
   if (props.p.status !== undefined && props.p.status !== 2) return false
@@ -141,6 +156,19 @@ onBeforeUnmount(() => {
 }
 .ph-txt { font-size: 34px; font-weight: 700; color: var(--c-text-3); opacity: .5; }
 
+/* 代码预览层：静态文本，pointer-events:none 保证点击卡片仍跳转项目主页 */
+.code-peek {
+  position: absolute; inset: 0; margin: 0; padding: 10px 12px;
+  overflow: hidden; white-space: pre; word-break: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px; line-height: 1.5; tab-size: 2;
+  color: #cdd7e6; background: #0e1420;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 68%, transparent 100%);
+  pointer-events: none;
+}
+.code-badge { background: rgba(30, 41, 59, .82); }
+.code-badge i { background: #60a5fa; }
 /* 实时预览层：pointer-events:none 保证点击卡片仍跳转项目主页 */
 .live-frame { position: absolute; inset: 0; }
 .live-frame iframe {

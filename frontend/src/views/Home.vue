@@ -83,10 +83,16 @@
           </AppState>
 
           <div v-if="list.length" class="grid">
-            <ProjectCard v-for="p in list" :key="p.project_id || p.id" :p="p" />
+            <ProjectCard
+              v-for="p in list" :key="p.project_id || p.id"
+              :p="p" :code-preview="p.code_preview || ''" :no-run="true"
+            />
           </div>
 
-          <!-- 加载更多 / 没有更多 -->
+          <!-- 触底哨兵：进入视野自动加载下一批 12 个 -->
+          <div ref="sentinel" class="load-sentinel" aria-hidden="true"></div>
+
+          <!-- 加载更多 / 没有更多（触底自动加载为主，按钮兜底） -->
           <div v-if="list.length" class="load-more">
             <template v-if="loading">
               <el-icon class="spin"><Loading /></el-icon> <span class="dim sm">加载中…</span>
@@ -148,7 +154,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProjectCard from '@/components/ProjectCard.vue'
 import AppState from '@/components/AppState.vue'
@@ -161,12 +167,15 @@ const route = useRoute()
 const router = useRouter()
 const isApp = IS_APP
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 12
 const list = ref([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
 const error = ref(null)
+/** 触底自动加载：观察列表末尾的哨兵元素 */
+const sentinel = ref(null)
+let io = null
 const categories = ref([])
 const tags = ref([])
 const hotList = ref([])
@@ -192,7 +201,7 @@ async function fetchPage(reset = false) {
   if (reset) { page.value = 1; list.value = [] }
   loading.value = true
   error.value = null
-  const params = { page: page.value, size: PAGE_SIZE, sort: filters.sort }
+  const params = { page: page.value, size: PAGE_SIZE, sort: filters.sort, include_preview: 1 }
   if (filters.category_id) params.category_id = filters.category_id
   if (filters.project_type) params.project_type = filters.project_type
   if (activeKeyword.value) params.keyword = activeKeyword.value
@@ -205,11 +214,29 @@ async function fetchPage(reset = false) {
   total.value = pickTotal(r.data)
 }
 
-function loadMore() { page.value += 1; fetchPage(false) }
+function loadMore() {
+  // loading 或已全部加载时，触底不再重复请求
+  if (loading.value || list.value.length >= total.value) return
+  page.value += 1
+  fetchPage(false)
+}
 function reload() {
   syncQuery()
   fetchPage(true)
 }
+
+/** 触底加载：哨兵进入视野就拉下一页；每次 reset 后列表变短，观察会自动重新触发 */
+function setupSentinel() {
+  if (typeof IntersectionObserver === 'undefined') return
+  if (io) io.disconnect()
+  io = new IntersectionObserver(
+    (entries) => { if (entries.some((e) => e.isIntersecting)) loadMore() },
+    { rootMargin: '240px 0px' }
+  )
+  // 等 DOM 更新后再绑定（列表可能因筛选清空）
+  Promise.resolve().then(() => { if (sentinel.value) io.observe(sentinel.value) })
+}
+onBeforeUnmount(() => { io?.disconnect(); io = null })
 
 function syncQuery() {
   const q = {}
@@ -279,6 +306,7 @@ watch(() => route.query, (q) => {
 onMounted(() => {
   fetchPage(true)
   fetchSide()
+  setupSentinel()
 })
 </script>
 
@@ -318,7 +346,8 @@ onMounted(() => {
 .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
 .filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-.load-more { text-align: center; padding: 24px 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.load-sentinel { width: 100%; height: 1px; }
+.load-more { text-align: center; padding: 12px 0 24px; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .mb12 { margin-bottom: 12px; }

@@ -65,7 +65,19 @@ export const uploadApi = {
   uploadCover: (pid, formData) => http.post(`/projects/${pid}/cover`, formData, {
   }),
   /** 移除项目封面 */
-  removeCover: (pid) => http.delete(`/projects/${pid}/cover`)
+  removeCover: (pid) => http.delete(`/projects/${pid}/cover`),
+  /* ---- 作者自助管理（我的作品页完整增删改查） ---- */
+  /** 改标题/简介/描述/分类/标签 */
+  updateMine: (pid, d) => http.put(`/projects/${pid}/mine`, d),
+  /** 下架 / 恢复上架 / 删除（软删） */
+  downMine: (pid, d) => http.post(`/projects/${pid}/down`, d || {}),
+  restoreMine: (pid) => http.post(`/projects/${pid}/restore`),
+  deleteMine: (pid, d) => http.delete(`/projects/${pid}`, { data: d || {} }),
+  /** 把已有作品加入系列（series_id 或 new_series_name + is_public） */
+  attachSeries: (pid, d) => http.post(`/projects/${pid}/series`, d),
+  /** 作者在线查看 / 保存源码 */
+  mySourceFiles: (pid) => http.get(`/projects/${pid}/source-files`),
+  saveMySource: (pid, d) => http.put(`/projects/${pid}/source-files`, d)
 }
 
 /* ================= 3.5 私信 / 项目群 ================= */

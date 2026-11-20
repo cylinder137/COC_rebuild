@@ -70,6 +70,9 @@
             <el-button size="small" text>查看</el-button>
           </router-link>
           <el-button v-if="p.status === 2" size="small" text @click="goDashboard(p)">看数据</el-button>
+          <el-button size="small" text @click="openEdit(p)">编辑</el-button>
+          <el-button size="small" text @click="openCode(p)">代码</el-button>
+          <el-button size="small" text @click="openSeriesFor(p)">加入系列</el-button>
           <el-button size="small" text @click="openCover(p)">封面</el-button>
           <!-- 草稿补提交：刷新或离开上传页后也能发布，避免卡在 status=0 -->
           <el-button
@@ -82,9 +85,14 @@
           >
             提交审核
           </el-button>
-          <el-button v-if="isRejectedOrDown(p)" size="small" text type="primary" @click="resubmit(p)">
-            重新编辑投稿
-          </el-button>
+          <!-- 已发布 → 下架；已下架 → 恢复 -->
+          <el-button v-if="p.status === 2" size="small" text type="warning" @click="downProject(p)">下架</el-button>
+          <el-button v-if="p.status === 3" size="small" text type="success" @click="restoreProject(p)">恢复上架</el-button>
+          <el-button
+            size="small" text type="danger"
+            :loading="deletingId === (p.project_id || p.id)"
+            @click="deleteProject(p)"
+          >删除</el-button>
         </div>
       </div>
     </div>
@@ -146,6 +154,90 @@
         @updated="onCoverUpdated"
       />
     </el-dialog>
+
+    <!-- 编辑作品元信息（标题 / 简介 / 描述） -->
+    <el-dialog v-model="editVisible" title="编辑作品信息" width="min(560px, 94vw)">
+      <el-form label-width="64px" v-if="editTarget">
+        <el-form-item label="标题">
+          <el-input v-model="editForm.title" maxlength="100" show-word-limit data-field="me_title" />
+        </el-form-item>
+        <el-form-item label="简介">
+          <el-input v-model="editForm.summary" maxlength="200" type="textarea" :rows="2" placeholder="一句话介绍你的作品" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="editForm.description" maxlength="2000" type="textarea" :rows="5" placeholder="详细说明、玩法、更新记录等" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 在线编辑源码（作者本人，文本文件） -->
+    <el-dialog v-model="codeVisible" :title="`编辑源码 · ${codeTarget?.title || ''}`" width="min(820px, 96vw)" top="4vh">
+      <div v-if="codeLoading" class="xs dim" style="padding:16px 0">正在读取源码…</div>
+      <template v-else-if="codeFiles.length">
+        <div class="code-layout">
+          <ul class="code-files">
+            <li
+              v-for="f in codeFiles"
+              :key="f.rel"
+              :class="{ sel: codeCur === f.rel, dis: !f.editable }"
+              @click="f.editable && pickCodeFile(f)"
+            >
+              <span class="ellipsis">{{ f.rel }}</span>
+              <span class="xs dim" v-if="!f.editable">只读</span>
+            </li>
+          </ul>
+          <div class="code-editor">
+            <div v-if="codeCur" class="xs dim code-hint">正在编辑：{{ codeCur }}</div>
+            <el-input
+              v-if="codeCur"
+              v-model="codeContent"
+              type="textarea"
+              :rows="18"
+              spellcheck="false"
+              class="code-area"
+              resize="none"
+            />
+            <div v-else class="xs dim" style="padding:16px 0">从左侧选一个文本文件开始编辑</div>
+          </div>
+        </div>
+      </template>
+      <div v-else class="xs dim" style="padding:16px 0">没有可在线编辑的文本文件</div>
+      <template #footer>
+        <span class="xs dim" style="float:left">修改直接写入当前版本的源码；已发布作品保存后立即生效</span>
+        <el-button @click="codeVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="codeSaving" :disabled="!codeCur" @click="saveCode">保存修改</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 把已有作品加入系列 -->
+    <el-dialog v-model="joinVisible" :title="`加入系列 · ${joinTarget?.title || ''}`" width="min(460px, 92vw)">
+      <div v-if="joinVisible">
+        <div class="vp-sub" style="margin-top:0">选择已有系列</div>
+        <el-select v-model="joinSeriesId" placeholder="不选则新建" clearable style="width:100%" data-field="me_join_series">
+          <el-option v-for="s in series" :key="s.series_id" :label="s.name" :value="s.series_id" />
+        </el-select>
+        <template v-if="!joinSeriesId">
+          <div class="vp-sub">或创建新系列</div>
+          <el-input v-model="joinNewName" maxlength="80" placeholder="例如：物理演示程序系列" data-field="me_new_series" />
+          <div class="row center gap8" style="margin-top:8px">
+            <span class="xs dim">公开</span>
+            <el-switch v-model="joinNewPublic" />
+            <span class="xs dim">公开后别人能在你的主页看到这个系列</span>
+          </div>
+        </template>
+        <div v-if="joinTarget?.series_name" class="xs dim" style="margin-top:10px">
+          当前系列：{{ joinTarget.series_name }}（保存后可改到这里）
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="joinVisible = false">取消</el-button>
+        <el-button type="primary" :loading="joinSaving" @click="saveJoin">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -158,6 +250,7 @@ import ProjectCard from '@/components/ProjectCard.vue'
 import CoverUploader from '@/components/CoverUploader.vue'
 import { seriesApi, uploadApi, safe } from '@/api'
 import { pickList, pickTotal } from '@/utils/format'
+import { pullFields } from '@/utils/formDom'
 
 const router = useRouter()
 const list = ref([])
@@ -168,6 +261,27 @@ const status = ref('')
 const coverVisible = ref(false)
 const coverTarget = ref(null)
 const submittingId = ref(null)
+const deletingId = ref(null)
+/* ---- 编辑元信息 ---- */
+const editVisible = ref(false)
+const editTarget = ref(null)
+const editSaving = ref(false)
+const editForm = reactive({ title: '', summary: '', description: '' })
+/* ---- 在线改源码 ---- */
+const codeVisible = ref(false)
+const codeTarget = ref(null)
+const codeLoading = ref(false)
+const codeSaving = ref(false)
+const codeFiles = ref([])
+const codeCur = ref('')
+const codeContent = ref('')
+/* ---- 加入系列 ---- */
+const joinVisible = ref(false)
+const joinTarget = ref(null)
+const joinSaving = ref(false)
+const joinSeriesId = ref(null)
+const joinNewName = ref('')
+const joinNewPublic = ref(false)
 /* ---- 项目系列 ---- */
 const series = ref([])
 const seriesFilter = ref('')
@@ -263,8 +377,127 @@ async function load() {
 
 function goDashboard(p) { router.push({ path: '/me/dashboard', query: { projectId: p.project_id || p.id } }) }
 function resubmit(p) {
-  ElMessage.info('编辑功能：MVP 阶段请新建投稿（后端 PUT /projects/{id} 已就绪，前端编辑页二期补）')
-  router.push('/upload')
+  // 老入口兼容：现在直接打开编辑弹窗
+  openEdit(p)
+}
+
+/* ================= 作者自助管理 ================= */
+const pidOf = (p) => p.project_id || p.id
+
+function openEdit(p) {
+  editTarget.value = p
+  editForm.title = p.title || ''
+  editForm.summary = p.summary || ''
+  editForm.description = p.description || ''
+  editVisible.value = true
+}
+
+async function saveEdit() {
+  // App 内 v-model 可能漏事件：以 DOM 实际值为准
+  pullFields(editForm, ['title'], { force: true })
+  const title = (editForm.title || '').trim()
+  if (!title) { ElMessage.warning('请填写标题'); return }
+  editSaving.value = true
+  const r = await safe(uploadApi.updateMine(pidOf(editTarget.value), {
+    title, summary: editForm.summary || '', description: editForm.description || ''
+  }))
+  editSaving.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '保存失败'); return }
+  editVisible.value = false
+  // 就地更新列表那张卡，避免整页重刷
+  const hit = list.value.find((x) => pidOf(x) === pidOf(editTarget.value))
+  if (hit) { hit.title = title; hit.summary = editForm.summary || ''; hit.description = editForm.description || '' }
+  ElMessage.success('已保存')
+}
+
+async function downProject(p) {
+  try {
+    await ElMessageBox.confirm(`确定下架《${p.title}》？下架后首页不再展示，可随时恢复上架。`, '下架作品', { type: 'warning' })
+  } catch (e) { return }
+  const r = await safe(uploadApi.downMine(pidOf(p)))
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '下架失败'); return }
+  ElMessage.success('已下架')
+  load()
+}
+
+async function restoreProject(p) {
+  const r = await safe(uploadApi.restoreMine(pidOf(p)))
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '恢复失败'); return }
+  ElMessage.success('已恢复上架')
+  load()
+}
+
+async function deleteProject(p) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除《${p.title}》？删除后不再展示（文件保留，可联系管理员恢复），此操作不可在页面自行撤销。`,
+      '删除作品', { type: 'error', confirmButtonText: '确认删除' }
+    )
+  } catch (e) { return }
+  deletingId.value = pidOf(p)
+  const r = await safe(uploadApi.deleteMine(pidOf(p)))
+  deletingId.value = null
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '删除失败'); return }
+  ElMessage.success('已删除')
+  load()
+}
+
+async function openCode(p) {
+  codeTarget.value = p
+  codeFiles.value = []
+  codeCur.value = ''
+  codeContent.value = ''
+  codeLoading.value = true
+  codeVisible.value = true
+  const r = await safe(uploadApi.mySourceFiles(pidOf(p)))
+  codeLoading.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '读取源码失败'); return }
+  codeFiles.value = Array.isArray(r.data?.files) ? r.data.files : []
+  const first = codeFiles.value.find((f) => f.editable)
+  if (first) pickCodeFile(first)
+}
+
+function pickCodeFile(f) {
+  codeCur.value = f.rel
+  codeContent.value = f.content || ''
+}
+
+async function saveCode() {
+  if (!codeCur.value) return
+  codeSaving.value = true
+  const r = await safe(uploadApi.saveMySource(pidOf(codeTarget.value), {
+    rel: codeCur.value, content: codeContent.value
+  }))
+  codeSaving.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '保存失败'); return }
+  const hit = codeFiles.value.find((f) => f.rel === codeCur.value)
+  if (hit) hit.content = codeContent.value
+  ElMessage.success('源码已保存')
+}
+
+function openSeriesFor(p) {
+  joinTarget.value = p
+  joinSeriesId.value = p.series_id || null
+  joinNewName.value = ''
+  joinNewPublic.value = false
+  joinVisible.value = true
+}
+
+async function saveJoin() {
+  if (!joinSeriesId.value && !(joinNewName.value || '').trim()) {
+    ElMessage.warning('请选择系列或填写新系列名称'); return
+  }
+  joinSaving.value = true
+  const payload = joinSeriesId.value
+    ? { series_id: joinSeriesId.value }
+    : { new_series_name: joinNewName.value.trim(), is_public: joinNewPublic.value ? 1 : 0 }
+  const r = await safe(uploadApi.attachSeries(pidOf(joinTarget.value), payload))
+  joinSaving.value = false
+  if (!r.ok) { ElMessage.error(r.error?.response?.data?.message || '加入失败'); return }
+  joinVisible.value = false
+  ElMessage.success('已加入系列')
+  loadSeries()
+  load()
 }
 
 /** 草稿(0) 直接补提交：html 走人工审核(→1)，scratch/structure 直接发布(→2) */
@@ -298,4 +531,28 @@ onMounted(async () => {
 .pub-dot { font-size: 8px; color: var(--c-success); margin-left: 2px; }
 .mng-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--c-border); }
 .mng-row:last-child { border-bottom: none; }
+.vp-sub { margin: 10px 0 5px; font-size: var(--fs-sm); color: var(--c-text-2); }
+.code-layout { display: flex; gap: 12px; min-height: 360px; }
+.code-files {
+  width: 210px; flex: none; list-style: none; margin: 0; padding: 4px;
+  border: 1px solid var(--c-border); border-radius: var(--r-md); overflow-y: auto; max-height: 460px;
+  background: var(--c-bg-sunken);
+}
+.code-files li {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding: 6px 8px; border-radius: var(--r-sm); font-size: var(--fs-sm); cursor: pointer;
+}
+.code-files li:hover { background: var(--c-bg-card); }
+.code-files li.sel { background: var(--c-primary); color: #fff; }
+.code-files li.dis { opacity: .5; cursor: default; }
+.code-editor { flex: 1; min-width: 0; }
+.code-hint { margin-bottom: 6px; }
+.code-area :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+  font-size: 12px !important; line-height: 1.6 !important; tab-size: 2;
+}
+@media (max-width: 767px) {
+  .code-layout { flex-direction: column; }
+  .code-files { width: auto; max-height: 130px; }
+}
 </style>

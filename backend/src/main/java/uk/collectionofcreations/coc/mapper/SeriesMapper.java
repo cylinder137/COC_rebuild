@@ -60,7 +60,7 @@ public interface SeriesMapper {
     @Update("UPDATE ${child} SET series_id = NULL WHERE series_id = #{series_id}")
     int detachChildren(Map<String, Object> param);
 
-    @Update("UPDATE ${child} SET series_id = #{series_id} WHERE ${idCol} = #{id} AND user_id = #{user_id}")
+    @Update("UPDATE ${child} SET series_id = #{series_id} WHERE ${idCol} = #{id} AND ${ownerCol} = #{user_id}")
     int attachChild(Map<String, Object> param);
 
     @Select("SELECT COUNT(*) FROM ${table} WHERE user_id = #{user_id}")

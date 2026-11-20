@@ -22,18 +22,20 @@ public class SeriesService {
 
     /** 系列种类白名单：表名/子表/主键列都只从这里取，不接受前端字符串拼 SQL */
     public enum Kind {
-        PROJECT("project_series", "project", "project_id", "项目系列"),
-        ASSET("asset_series", "asset", "asset_id", "素材系列");
+        PROJECT("project_series", "project", "project_id", "author_id", "项目系列"),
+        ASSET("asset_series", "asset", "asset_id", "user_id", "素材系列");
 
         final String table;
         final String child;
         final String idCol;
+        final String ownerCol;
         final String label;
 
-        Kind(String table, String child, String idCol, String label) {
+        Kind(String table, String child, String idCol, String ownerCol, String label) {
             this.table = table;
             this.child = child;
             this.idCol = idCol;
+            this.ownerCol = ownerCol;
             this.label = label;
         }
     }
@@ -200,11 +202,22 @@ public class SeriesService {
         }
     }
 
+    /** 把某个子项挂到系列上（供项目自助管理调用；归属校验由调用方完成） */
+    @Transactional
+    public void attach(Kind kind, long seriesId, long itemId, long uid) {
+        Map<String, Object> p = base(kind);
+        p.put("series_id", seriesId);
+        p.put("id", itemId);
+        p.put("user_id", uid);
+        seriesMapper.attachChild(p);
+    }
+
     private Map<String, Object> base(Kind kind) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("table", kind.table);
         p.put("child", kind.child);
         p.put("idCol", kind.idCol);
+        p.put("ownerCol", kind.ownerCol);
         return p;
     }
 
