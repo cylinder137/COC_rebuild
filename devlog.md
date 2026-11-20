@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-11-20 · v2.1.6：管理员权限管理（撤销管理员）+ 后端接口修复
+
+> 本版补齐管理端「撤销管理员」能力（PR #4），并修复了一个**线上问题**：设置/撤销管理员的后端接口在运行环境中不存在。打包为 **2.1.6（versionCode 23）**。
+
+### 一、撤销管理员功能
+
+| 文件 | 改动说明 |
+| --- | --- |
+| `backend/.../controller/AdminController.java` | 新增 `POST /api/v1/admin/users/{user_id}/revoke-admin` |
+| `backend/.../service/AdminService.java` | 新增 `revokeAdmin`：防自锁、防撤销最后一个管理员，写审计 + 通知 |
+| `frontend/src/api/index.js` | `adminApi` 新增 `revokeAdmin(uid)` |
+| `frontend/src/views/admin/AdminUsers.vue` | 操作列新增「撤销管理员」按钮（非管理员/自己时禁用） |
+
+### 二、后端接口不存在的根因与修复（重要）
+
+- **现象**：用户实测「设为管理员」提示接口不存在；线上 `set-admin` / `revoke-admin` 均返回 `{"code":404,"message":"接口或资源不存在"}`。
+- **根因**：运行中的后端 jar 编译于 11-19 16:14，早于这两个接口加入的时间。源码更新后**从未重新编译部署后端**，服务一直在跑旧 jar，因此路由里没有这两个端点。
+- **修复**：`mvn package -DskipTests` 重新编译（须先停服务释放 jar 锁），替换 jar 后重启 `coc-backend`。
+- **附带问题**：重启时 Flyway 报 V4 迁移 checksum mismatch（数据库 1833859360 / 本地 2052807765，因 V4 脚本在 11-19 部署后被微调）。确认 V4 表已建成、`success=1` 后，按 flyway repair 语义校准 checksum，并在服务参数加 `--spring.flyway.repair-on-migrate=true`。
+- **验证**：合法管理员 token 请求下，`set-admin` / `revoke-admin` 从 404 变为正常业务响应；用临时账号实测 `type 2→3→2` 完整闭环成功，测试数据已清理。
+
+### 备注
+
+- 前端无数据库变更；后端部署为运维操作，不在 APK 打包范围内。
+
+---
+
 ## 2026-11-20 · v2.1.5：虚拟摇杆 PWM 连续占空比调制
 
 > 对 2.1.3 引入的摇杆方波（PWM）微调做重构：从离散 on/off 阶段切换改为每帧连续占空比，打包为 **2.1.5（versionCode 22）**。
