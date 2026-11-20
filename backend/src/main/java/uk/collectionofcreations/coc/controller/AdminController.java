@@ -220,6 +220,13 @@ public class AdminController {
                 body == null ? null : Params.str(body, "reason"), FileController.clientIp(request)));
     }
 
+    /** 将用户设为管理员（type=3） */
+    @PostMapping("/users/{user_id}/set-admin")
+    public ApiResponse<Map<String, Object>> setAdmin(@PathVariable("user_id") long userId,
+                                                     HttpServletRequest request) {
+        return ApiResponse.ok(adminService.setAdmin(userId, FileController.clientIp(request)));
+    }
+
     // ---- 统计 / 日志 ----
 
     @GetMapping("/stats/platform")

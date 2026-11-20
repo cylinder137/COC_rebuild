@@ -287,6 +287,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe } from '@/api'
+import { SITE_ORIGIN } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import {
@@ -631,7 +632,9 @@ function openNew() {
   window.open(runUrl.value, '_blank', 'noopener')
 }
 function copyLink() {
-  navigator.clipboard?.writeText(window.location.href).then(
+  const link = `${SITE_ORIGIN}/projects/${pid.value}`
+  const text = `【造物集】${detail.value?.title || ''}\n${link}`
+  navigator.clipboard?.writeText(text).then(
     () => ElMessage.success('链接已复制'),
     () => ElMessage.warning('复制失败，请手动复制地址栏链接')
   )

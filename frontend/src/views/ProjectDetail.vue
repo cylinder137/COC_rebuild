@@ -386,6 +386,7 @@ import AppState from '@/components/AppState.vue'
 import CommentItem from '@/components/CommentItem.vue'
 import VirtualPad from '@/components/VirtualPad.vue'
 import { projectApi, interactApi, userApi, categoryApi, uploadApi, imApi, safe } from '@/api'
+import { SITE_ORIGIN } from '@/api/http'
 import { readDomField } from '@/utils/formDom'
 import { resolveKey, loadScheme } from '@/utils/vkeys'
 import { useAuthStore } from '@/stores/auth'
@@ -1017,7 +1018,9 @@ function openNew() {
   window.open(runUrl.value, '_blank', 'noopener')
 }
 function copyLink() {
-  navigator.clipboard?.writeText(window.location.href).then(
+  const link = `${SITE_ORIGIN}/projects/${pid.value}`
+  const text = `【造物集】${detail.value?.title || ''}\n${link}`
+  navigator.clipboard?.writeText(text).then(
     () => ElMessage.success('链接已复制'),
     () => ElMessage.warning('复制失败，请手动复制地址栏链接')
   )

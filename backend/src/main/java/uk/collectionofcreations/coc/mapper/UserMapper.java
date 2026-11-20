@@ -49,6 +49,10 @@ public interface UserMapper {
             + "WHERE user_id = #{user_id}")
     int updateStatus(Map<String, Object> param);
 
+    /** 管理员身份调整：type=3 管理员；type 每次请求从库读取，改完即时生效，无需失效 token */
+    @Update("UPDATE `user` SET type = #{type}, updated_at = NOW() WHERE user_id = #{user_id}")
+    int updateType(Map<String, Object> param);
+
     @Update("UPDATE `user` SET password_hash = #{password_hash}, must_change_password = 1, "
             + "temp_password_expires_at = DATE_ADD(NOW(), INTERVAL 24 HOUR), token_version = token_version + 1, "
             + "updated_at = NOW() WHERE user_id = #{user_id}")

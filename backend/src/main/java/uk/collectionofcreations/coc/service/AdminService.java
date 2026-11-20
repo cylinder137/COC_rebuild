@@ -540,6 +540,32 @@ public class AdminService {
         return data;
     }
 
+    /** 将用户设为管理员（type=3）；写审计并通知该用户 */
+    @Transactional
+    public Map<String, Object> setAdmin(long userId, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        Map<String, Object> user = userMapper.findAuthById(userId);
+        if (user == null) {
+            throw BizException.notFound("用户不存在");
+        }
+        if (((Number) user.get("type")).intValue() == 3) {
+            throw BizException.badRequest("该用户已是管理员");
+        }
+        if (((Number) user.get("status")).intValue() == 3) {
+            throw BizException.badRequest("不能将已注销的账号设为管理员");
+        }
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("user_id", userId);
+        p.put("type", 3);
+        userMapper.updateType(p);
+        notify(userId, "system", "你已被设为管理员", "你已被设为平台管理员，可进入管理后台", "/admin");
+        audit(adminId, "set_admin", "user", userId, "设为管理员", ip);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("user_id", userId);
+        data.put("type", 3);
+        return data;
+    }
+
     // ---------------- 平台统计 / 存储路径 ----------------
 
     public Map<String, Object> platformStats() {

@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-11-20 · 项目详情「复制链接」修正（正确 baseurl + 新格式）
+
+> 详情页「复制链接」原来复制 `window.location.href`，App 壳里是 `https://localhost`、本地调试是 `127.0.0.1:8084`，复制给别人打不开；且格式不符合分享需求。本次修正为固定站点源 + 统一分享格式。
+
+### 改动目的
+
+修正复制链接的 baseurl（统一用站点唯一对外源 `SITE_ORIGIN`），并把复制内容改为「标题 + 链接」两行的分享格式。
+
+### 具体改动
+
+| 文件 | 改动说明 |
+| --- | --- |
+| `frontend/src/views/ProjectDetail.vue` | `copyLink()`：改为 `${SITE_ORIGIN}/projects/${pid}` 拼链接；复制文本格式 `【造物集】{title}\n{link}`；新增 `import { SITE_ORIGIN } from '@/api/http'` |
+| `frontend-app/src/views/ProjectDetail.vue` | 同上（App 端同代码库，同步修正） |
+| `frontend-app/src/api/http.js` | 补导出 `SITE_ORIGIN = 'https://collectionofcreations.uk'`（App 端原本无此常量；`frontend` 的 http.js 已有） |
+
+### 备注
+
+- **链接格式**：`【造物集】{项目标题}\n{https://collectionofcreations.uk/projects/{项目id}}`，标题与链接以换行分隔。
+- **baseurl 来源**：统一走 `SITE_ORIGIN`（`https://collectionofcreations.uk`），不碰 `window.location.origin`（App 壳里是 localhost）。
+- **无数据库 / 接口变更**：纯前端改动。
+- **生效仍需重建**：前端 `npm run build` 重建 dist；App 端上线需重新打包（内置资源不自动更新）。
+
+---
+
+## 2026-11-20 · v2.1.4：管理员后台支持「设为管理员」
+
+> 后台「账号管理」页新增把普通 / 开发者用户提升为管理员的能力（`user.type` 1/2 → 3）。
+
+### 改动目的
+
+管理员需要在后台直接把他人设为管理员，而不是手工改数据库；同时保证操作有审计、有安全边界。
+
+### 具体改动
+
+| 文件 | 改动说明 |
+| --- | --- |
+| `backend/.../mapper/UserMapper.java` | 新增 `updateType`：`UPDATE user SET type=#{type}, updated_at=NOW()` |
+| `backend/.../service/AdminService.java` | 新增 `setAdmin(userId, ip)`：校验「用户存在 / 非已管理员 / 非已注销」→ 置 type=3 → 写审计 + 通知目标用户 |
+| `backend/.../controller/AdminController.java` | 新增 `POST /api/v1/admin/users/{user_id}/set-admin` |
+| `frontend/src/api/index.js` | `adminApi` 新增 `setAdmin(uid)` |
+| `frontend/src/views/admin/AdminUsers.vue` | 操作列新增「设为管理员」按钮（已管理员 / 已注销时禁用）+ 二次确认弹窗 |
+
+### 备注
+
+- **无数据库结构变更**：复用 `user.type`（3=管理员）。
+- **即时生效**：`type` 由 `AuthInterceptor` 每次请求从库读取（`AuthContext.isAdmin()` 判断），改完 `type=3` 下一次请求即具备管理员权限，无需失效 JWT 或重登。
+- **安全边界**：已注销（`status=3`）与已管理员（`type=3`）不可操作；操作写 `operation_log` 审计。
+- **生效仍需重建**：后端 `mvn package` 后重启 `coc-backend`；前端 `npm run build` 重建 dist。
+
+---
+
 ## 2026-11-20 · v2.1.3：手机端虚拟摇杆优化（方波微调 + 摇杆吸附）
 
 > 本次改动来自 PR #1（`feature/vpad-mobile-opt`），打包为 **2.1.3（versionCode 20）**。

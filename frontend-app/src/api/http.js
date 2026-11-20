@@ -4,6 +4,11 @@ import { ElMessage } from 'element-plus'
 export const API_BASE =
   import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8090/api/v1'
 export const WS_BASE = import.meta.env.VITE_WS_BASE || 'ws://127.0.0.1:8090'
+/**
+ * 站点唯一对外源。凡是要「交给用户带走」的地址（分享链接、素材直链）都必须用它，
+ * 不能用 window.location.origin —— App 壳里是 https://localhost，别人打不开。
+ */
+export const SITE_ORIGIN = 'https://collectionofcreations.uk'
 export const ZONE = import.meta.env.VITE_ZONE || 'main'
 export const IS_USER_ZONE = ZONE === 'user'
 
