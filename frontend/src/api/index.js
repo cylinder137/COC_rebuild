@@ -108,6 +108,10 @@ export const adminApi = {
   /** 在线保存源码文本文件修改 */
   saveSource: (pid, d) => http.put(`/admin/projects/${pid}/source-files`, d),
   bugFeedbacks: (params) => http.get('/admin/bug-feedback', { params }),
+  bugFeedbackDetail: (id) => http.get(`/admin/bug-feedback/${id}`),
+  addBugFeedback: (d) => http.post('/admin/bug-feedback', d),
+  updateBugFeedback: (id, d) => http.put(`/admin/bug-feedback/${id}`, d),
+  deleteBugFeedback: (id) => http.delete(`/admin/bug-feedback/${id}`),
   handleBugFeedback: (id) => http.post(`/admin/bug-feedback/${id}/handle`)
 }
 
