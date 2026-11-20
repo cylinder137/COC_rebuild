@@ -100,6 +100,7 @@ export const adminApi = {
   rejectPasswordReset: (id, d) => http.post(`/admin/password-resets/${id}/reject`, d || {}),
   cancelUser: (uid, d) => http.post(`/admin/users/${uid}/cancel`, d || {}),
   setAdmin: (uid) => http.post(`/admin/users/${uid}/set-admin`),
+  revokeAdmin: (uid) => http.post(`/admin/users/${uid}/revoke-admin`),
   platformStats: () => http.get('/admin/stats/platform'),
   /** 全平台浏览 / 评论趋势折线：range=2/7/15/30 */
   platformTrend: (range) => http.get('/admin/stats/platform/trend', { params: { range } }),

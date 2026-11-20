@@ -566,6 +566,35 @@ public class AdminService {
         return data;
     }
 
+    /** 撤销管理员（type=3 → 2）；防自锁、防降最后一个管理员；写审计并通知该用户 */
+    @Transactional
+    public Map<String, Object> revokeAdmin(long userId, String ip) {
+        long adminId = AuthContext.requireAdmin();
+        if (adminId == userId) {
+            throw BizException.badRequest("不能撤销自己的管理员权限（会把自己锁在门外）");
+        }
+        Map<String, Object> user = userMapper.findAuthById(userId);
+        if (user == null) {
+            throw BizException.notFound("用户不存在");
+        }
+        if (((Number) user.get("type")).intValue() != 3) {
+            throw BizException.badRequest("该用户不是管理员");
+        }
+        if (userMapper.countAdmins() <= 1) {
+            throw BizException.badRequest("平台至少需要保留一名管理员，无法撤销");
+        }
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("user_id", userId);
+        p.put("type", 2);
+        userMapper.updateType(p);
+        notify(userId, "system", "管理员权限已被撤销", "你的平台管理员权限已被撤销，如有疑问请联系其他管理员", "/me/projects");
+        audit(adminId, "revoke_admin", "user", userId, "撤销管理员", ip);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("user_id", userId);
+        data.put("type", 2);
+        return data;
+    }
+
     // ---------------- 平台统计 / 存储路径 ----------------
 
     public Map<String, Object> platformStats() {
