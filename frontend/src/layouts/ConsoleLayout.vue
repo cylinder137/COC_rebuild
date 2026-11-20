@@ -26,6 +26,19 @@
         </div>
       </aside>
       <section class="console-content">
+        <!-- 窄屏 / App 内：侧边栏隐藏后用横向滚动菜单接管导航（否则管理台子页无法互相切换） -->
+        <nav class="m-menu" aria-label="控制台导航">
+          <button
+            v-for="it in flatMenu"
+            :key="it.path"
+            type="button"
+            :class="{ on: activePath === it.path }"
+            @click="router.push(it.path)"
+          >
+            <el-icon><component :is="it.icon" /></el-icon>
+            <span>{{ it.title }}</span>
+          </button>
+        </nav>
         <div class="console-inner">
           <router-view v-slot="{ Component }">
             <component :is="Component" />
@@ -39,7 +52,7 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 import { useUiStore } from '@/stores/ui'
@@ -51,6 +64,7 @@ const isApp = IS_APP
 
 const ui = useUiStore()
 const route = useRoute()
+const router = useRouter()
 const activePath = computed(() => route.path)
 
 const userMenu = [
@@ -94,6 +108,8 @@ const adminMenu = [
 ]
 
 const menu = computed(() => (route.meta.area === 'admin' ? adminMenu : userMenu))
+/** 横向菜单不分组的扁平列表 */
+const flatMenu = computed(() => menu.value.flatMap((g) => g.items))
 
 onMounted(async () => {
   const r = await safe(imApi.unread())
@@ -125,6 +141,31 @@ onMounted(async () => {
 .collapse-btn:hover { color: var(--c-primary); border-color: var(--c-primary-border); }
 .console-content { flex: 1; min-width: 0; background: var(--c-bg-page); }
 .console-inner { padding: 24px; max-width: 1400px; }
+
+/* ---------- 窄屏 / App 内横向菜单 ---------- */
+.m-menu { display: none; }
+@media (max-width: 767px) {
+  .m-menu {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 12px 16px 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .m-menu::-webkit-scrollbar { display: none; }
+  .m-menu button {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--c-border); background: var(--c-bg-card);
+    color: var(--c-text-2); font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .m-menu button.on {
+    background: var(--c-primary-weak); color: var(--c-primary);
+    border-color: var(--c-primary-border); font-weight: 600;
+  }
+}
+/* App 内横屏宽度也走横向菜单（底部 tab 同理不区分宽度） */
+:global(.console.is-native) .m-menu { display: flex; }
+
 @media (max-width: 767px) {
   .sidebar { display: none; }
   /* 必须给底部 tab 让位：56px 栏高 + 安全区 + 16px 留白，与 BottomTabBar 对齐 */
