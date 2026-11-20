@@ -65,34 +65,34 @@
       <div v-for="p in list" :key="p.project_id || p.id" class="card">
         <ProjectCard :p="p" :show-status="true" :show-reason="true" />
         <div v-if="p.series_name" class="xs dim series-tag">系列：{{ p.series_name }}</div>
-        <div class="ops">
+        <div class="ops" role="group" aria-label="作品操作">
           <router-link :to="`/projects/${p.project_id || p.id}`">
-            <el-button size="small" text>查看</el-button>
+            <el-button size="small" text class="op-btn" title="查看作品"><el-icon><View /></el-icon></el-button>
           </router-link>
-          <el-button v-if="p.status === 2" size="small" text @click="goDashboard(p)">看数据</el-button>
-          <el-button size="small" text @click="openEdit(p)">编辑</el-button>
-          <el-button size="small" text @click="openCode(p)">代码</el-button>
-          <el-button size="small" text @click="openSeriesFor(p)">加入系列</el-button>
-          <el-button size="small" text @click="openCover(p)">封面</el-button>
+          <el-button v-if="p.status === 2" size="small" text class="op-btn" title="看数据" @click="goDashboard(p)"><el-icon><DataAnalysis /></el-icon></el-button>
+          <el-button size="small" text class="op-btn" title="编辑标题/简介/描述" @click="openEdit(p)"><el-icon><EditPen /></el-icon></el-button>
+          <el-button size="small" text class="op-btn" title="编辑源码" @click="openCode(p)"><el-icon><Document /></el-icon></el-button>
+          <el-button size="small" text class="op-btn" title="加入系列" @click="openSeriesFor(p)"><el-icon><Collection /></el-icon></el-button>
+          <el-button size="small" text class="op-btn" title="设置封面" @click="openCover(p)"><el-icon><Picture /></el-icon></el-button>
           <!-- 草稿补提交：刷新或离开上传页后也能发布，避免卡在 status=0 -->
           <el-button
             v-if="p.status === 0"
             size="small"
             text
+            class="op-btn"
             type="primary"
+            title="提交审核"
             :loading="submittingId === (p.project_id || p.id)"
             @click="submitDraft(p)"
-          >
-            提交审核
-          </el-button>
+          ><el-icon><Promotion /></el-icon></el-button>
           <!-- 已发布 → 下架；已下架 → 恢复 -->
-          <el-button v-if="p.status === 2" size="small" text type="warning" @click="downProject(p)">下架</el-button>
-          <el-button v-if="p.status === 3" size="small" text type="success" @click="restoreProject(p)">恢复上架</el-button>
+          <el-button v-if="p.status === 2" size="small" text class="op-btn" type="warning" title="下架" @click="downProject(p)"><el-icon><ArrowDown /></el-icon></el-button>
+          <el-button v-if="p.status === 3" size="small" text class="op-btn" type="success" title="恢复上架" @click="restoreProject(p)"><el-icon><Refresh /></el-icon></el-button>
           <el-button
-            size="small" text type="danger"
+            size="small" text class="op-btn" type="danger" title="删除"
             :loading="deletingId === (p.project_id || p.id)"
             @click="deleteProject(p)"
-          >删除</el-button>
+          ><el-icon><Delete /></el-icon></el-button>
         </div>
       </div>
     </div>
@@ -523,9 +523,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; }
 .card { padding: 12px; }
-.ops { display: flex; gap: 4px; margin-top: 10px; justify-content: flex-end; }
+.ops { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 2px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--c-border); }
+.ops :deep(.el-button + .el-button),
+.ops :deep(a + .el-button),
+.ops :deep(a + a) { margin-left: 0; }
+.ops .op-btn.el-button { padding: 5px; margin: 0; height: 26px; min-height: 26px; }
+.ops .op-btn .el-icon { font-size: 15px; }
 .mb16 { margin-bottom: 16px; }
 .series-tag { margin-top: 4px; }
 .pub-dot { font-size: 8px; color: var(--c-success); margin-left: 2px; }
