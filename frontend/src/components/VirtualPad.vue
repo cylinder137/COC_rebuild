@@ -139,13 +139,15 @@ const counts = Object.create(null)
 
 /**
  * 方波微调（PWM 模拟模拟量）：键盘事件只有按下/抬起两个状态，
- * 小幅度推杆时用「按键方波」模拟——占空比随推杆幅度变化，
+ * 小幅度推杆时用「按键方波」模拟——占空比随推杆幅度连续变化，
  * 推得越轻按键按下的时间占比越低，角色就以对应慢速微调移动。
+ * PWM 频率 60Hz：每帧为一个 PWM 周期，用 Bresenham 误差扩散
+ * 累加器把连续占空比摊到帧上，无离散的模式切换、无相位拍频抖动。
  */
-const SW = { dz: 0.16, full: 0.82, onMs: 65, minPeriod: 90, maxPeriod: 650 }
+const SW = { dz: 0.16, full: 0.82, freq: 60 }
 const wave = {
-  joyA: { active: false, m: 0, want: new Set(), phase: 'off', tSwitch: 0 },
-  joyB: { active: false, m: 0, want: new Set(), phase: 'off', tSwitch: 0 }
+  joyA: { active: false, m: 0, want: new Set(), acc: 0 },
+  joyB: { active: false, m: 0, want: new Set(), acc: 0 }
 }
 /** 摇杆吸附：本次手势里底座从哪儿弹回（null = 没吸附过） */
 const joyHome = { joyA: null, joyB: null }
@@ -258,8 +260,7 @@ function onDown(e, node, kind) {
   }
   wave[node.id].active = false
   wave[node.id].m = 0
-  wave[node.id].phase = 'off'
-  wave[node.id].tSwitch = 0
+  wave[node.id].acc = 0
 
   // 摇杆吸附：热区内偏心按下时底座贴向手指落点，拇指不必精确对准圆心；
   // 松手后底座弹回原位（joyHome 记住来时的地方）
@@ -340,8 +341,7 @@ function updateJoy(e, node, elIn) {
   w.want = want
   if (!w.active) {
     w.active = true
-    w.phase = 'off'
-    w.tSwitch = 0
+    w.acc = 0
     startWaveLoop()
   }
 }
@@ -352,13 +352,12 @@ let waveRaf = 0
 function startWaveLoop() {
   if (waveRaf) return
   const step = () => {
-    const now = performance.now()
     let any = false
     for (const id of ['joyA', 'joyB']) {
       const w = wave[id]
       if (!w.active) continue
       any = true
-      applyWave(id, w, now)
+      applyWave(id, w)
     }
     waveRaf = any ? requestAnimationFrame(step) : 0
   }
@@ -373,35 +372,28 @@ function syncKeys(id, want) {
   joyHeld[id] = new Set(want)
 }
 
-function applyWave(id, w, now) {
+/** 60Hz PWM：每帧一个周期，按连续占空比决定本帧按键通断 */
+const PWM_ON = new Set()
+
+function applyWave(id, w) {
   const held = joyHeld[id]
   // 死区：回中，全部松开
   if (w.m < SW.dz) {
     for (const f of held) release(f)
     held.clear()
+    w.acc = 0
     return
   }
-  // 推满：持续按住，全速
-  if (w.m >= SW.full) {
-    syncKeys(id, w.want)
-    return
-  }
-  // 方波：on 时长固定，off 时长随幅度拉长 → 幅度越小平均速度越慢
+  // 占空比随幅度连续变化：duty ∈ [0,1]，无离散的阶段切换
   const duty = Math.min(1, (w.m - SW.dz) / (SW.full - SW.dz))
-  if (w.phase === 'on') {
-    if (now >= w.tSwitch) {
-      w.phase = 'off'
-      const period = clamp(SW.onMs / Math.max(duty, 0.02), SW.minPeriod, SW.maxPeriod)
-      w.tSwitch = now + period - SW.onMs
-      for (const f of held) release(f)
-      held.clear()
-    } else {
-      syncKeys(id, w.want)
-    }
-  } else if (now >= w.tSwitch) {
-    w.phase = 'on'
-    w.tSwitch = now + SW.onMs
+  // Bresenham 误差扩散：累加 duty，≥1 时本帧导通并扣除一个周期，
+  // 长期导通占比精确等于 duty，且不受 rAF 与 PWM 相位对齐的拍频影响
+  w.acc += duty
+  if (w.acc >= 1) {
+    w.acc -= 1
     syncKeys(id, w.want)
+  } else {
+    syncKeys(id, PWM_ON)
   }
 }
 
