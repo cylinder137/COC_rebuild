@@ -24,4 +24,4 @@ export const IS_TOUCH = (() => {
 })()
 
 /** 构建标记：显示在顶栏品牌名旁边，用来一眼确认装的是哪个包 */
-export const APP_BUILD = 'v2.1.6'
+export const APP_BUILD = 'v2.1.7'

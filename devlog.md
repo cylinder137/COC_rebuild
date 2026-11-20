@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-11-20 · v2.1.7：我的作品完整 CRUD + 首页预加载优化 + 虚拟按键滑块修复
+
+> 本版把上一轮功能开发（源码 `4b66dbb`）正式发版，并同步部署网页前端与后端服务。打包为 **2.1.7（versionCode 24）**。
+
+### 一、我的作品：完整增删改查与系列管理
+
+| 文件 | 改动说明 |
+| --- | --- |
+| `backend/.../controller/ProjectController.java` | 新增作者端路由：改标题/简介、下架/恢复、删除、源码列表/保存、加入系列 |
+| `backend/.../service/ProjectService.java` | 实现上述作者操作、越权校验与操作审计；列表支持 `include_preview=1` 返回代码预览 |
+| `backend/.../mapper/SeriesMapper.java`、`service/SeriesService.java` | 修复加入系列 SQL 的 owner 列映射（项目表用 `author_id`，素材表用 `user_id`） |
+| `frontend/src/api/index.js` | 新增 `projectApi.updateMine/downMine/restoreMine/deleteMine/mySourceFiles/saveMySourceFile/attachSeries` |
+| `frontend/src/views/MeProjects.vue` | 项目卡片新增编辑、代码、加入系列、下架/恢复、删除弹窗与操作 |
+
+### 二、首页项目浏览优化
+
+- 一次拉取 12 个项目，请求带 `include_preview=1`，每个项目附带约 1400 字符静态源码预览。
+- `ProjectCard.vue` 新增 `codePreview/noRun`：预览态不运行 iframe，节省用户端算力。
+- `Home.vue` 使用 `IntersectionObserver` 触底加载下一批 12 个。
+
+### 三、手机端虚拟按键设置修复
+
+- `VirtualPad.vue` 用自定义轨道/填充/滑块替换 `el-slider`，按轨道两端屏幕坐标投影计算比例。
+- 适配旋转、缩放、全屏后的坐标映射，解决透明度/尺寸拖动条轻微拖动数值剧变的问题。
+
+### 四、运行环境和发版
+
+- 前端：`npm run build` 后部署到 `frontend/dist`，nginx 8084 直接读取该目录。
+- 后端：停服后 `mvn package -DskipTests` 重新生成 `backend/target/coc-platform-backend-0.1.0.jar`，重启 `coc-backend` 服务。
+- 版本标记：`frontend/src/utils/platform.js` → `v2.1.7`；下载页新增 2.1.7 条目。
+- 发布产物：`coc-app-2.1.7.apk` 与 `coc-app-latest.apk`；`downloads/version.json` / `version.txt` 同步版本号、versionCode、sha256、size。
+
+---
+
 ## 2026-11-20 · v2.1.6：管理员权限管理（撤销管理员）+ 后端接口修复
 
 > 本版补齐管理端「撤销管理员」能力（PR #4），并修复了一个**线上问题**：设置/撤销管理员的后端接口在运行环境中不存在。打包为 **2.1.6（versionCode 23）**。

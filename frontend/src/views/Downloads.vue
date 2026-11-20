@@ -63,6 +63,7 @@ import { fileUrl, fmtSize } from '@/utils/format'
 const RELEASES = [
   // 最新版的体积留 0：最新版卡片实际读服务器 version.json，这里的 size 只是取不到接口时的兜底，
   // 而 fmtSize(0) 显示「—」；填真实字节数反而永远慢一拍（改数字会让包体本身变几个字节）。
+  { version: '2.1.7', file: 'coc-app-2.1.7.apk', date: '2026-11-20', size: 0, note: '我的作品完整增删改查/加入系列；首页12条代码预览与触底加载；虚拟按键滑块映射修复' },
   { version: '2.1.6', file: 'coc-app-2.1.6.apk', date: '2026-11-20', size: 0, note: '管理端新增撤销管理员权限；后端权限接口重新部署生效' },
   { version: '2.1.5', file: 'coc-app-2.1.5.apk', date: '2026-11-20', size: 3894185, note: '虚拟摇杆 PWM 改为连续占空比调制（60Hz），微调手感更平滑' },
   { version: '2.1.4', file: 'coc-app-2.1.4.apk', date: '2026-11-20', size: 3894145, note: '管理端 Bug 反馈增删改查 + 设为管理员；详情页复制链接修正' },
