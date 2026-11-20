@@ -1,5 +1,11 @@
 <template>
-  <div ref="padEl" class="vpad" :class="{ 'is-edit': editing }" @pointerdown.self="onBlankDown">
+  <div
+    ref="padEl"
+    class="vpad"
+    :class="{ 'is-edit': editing }"
+    @pointerdown.self="onBlankDown"
+    @contextmenu.prevent
+  >
     <!-- ---------- 两个摇杆（左：WASD / 右：方向键，映射互不相干） ---------- -->
     <div
       v-for="j in joyNodes"
@@ -100,7 +106,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { readDomField } from '@/utils/formDom'
 import {
@@ -130,6 +136,19 @@ const knobs = reactive({ joyA: { x: 0, y: 0 }, joyB: { x: 0, y: 0 } })
 const joyHeld = { joyA: new Set(), joyB: new Set() }
 /** 同一个字段可能被多个控件按住，用计数避免早松 */
 const counts = Object.create(null)
+
+/**
+ * 方波微调（PWM 模拟模拟量）：键盘事件只有按下/抬起两个状态，
+ * 小幅度推杆时用「按键方波」模拟——占空比随推杆幅度变化，
+ * 推得越轻按键按下的时间占比越低，角色就以对应慢速微调移动。
+ */
+const SW = { dz: 0.16, full: 0.82, onMs: 65, minPeriod: 90, maxPeriod: 650 }
+const wave = {
+  joyA: { active: false, m: 0, want: new Set(), phase: 'off', tSwitch: 0 },
+  joyB: { active: false, m: 0, want: new Set(), phase: 'off', tSwitch: 0 }
+}
+/** 摇杆吸附：本次手势里底座从哪儿弹回（null = 没吸附过） */
+const joyHome = { joyA: null, joyB: null }
 
 const joyNodes = computed(() =>
   ['joyA', 'joyB']
@@ -188,6 +207,12 @@ function releaseAll() {
     joyHeld[id].clear()
     knobs[id] = { x: 0, y: 0 }
     joyPid[id] = null
+    wave[id].active = false
+    // 弹回被吸附的摇杆底座
+    const t = id === 'joyA' ? scheme.joyA : scheme.joyB
+    const home = joyHome[id]
+    if (home && t) { t.x = home.x; t.y = home.y }
+    joyHome[id] = null
   }
 }
 
@@ -231,7 +256,32 @@ function onDown(e, node, kind) {
     for (const f of joyHeld[node.id]) release(f)
     joyHeld[node.id].clear()
   }
-  updateJoy(e, node)
+  wave[node.id].active = false
+  wave[node.id].m = 0
+  wave[node.id].phase = 'off'
+  wave[node.id].tSwitch = 0
+
+  // 摇杆吸附：热区内偏心按下时底座贴向手指落点，拇指不必精确对准圆心；
+  // 松手后底座弹回原位（joyHome 记住来时的地方）
+  const r = el.getBoundingClientRect()
+  const [sdx, sdy] = toStage(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2))
+  if (!joyHome[node.id] && Math.hypot(sdx, sdy) > node.size * 0.22) {
+    joyHome[node.id] = { x: node.x, y: node.y }
+    const pad = padEl.value
+    if (pad) {
+      const w = pad.offsetWidth || 1
+      const h = pad.offsetHeight || 1
+      const t = findNode(node.id)
+      if (t) {
+        t.x = clamp(t.x + (sdx / w) * 100, 5, 95)
+        t.y = clamp(t.y + (sdy / h) * 100, 5, 95)
+      }
+    }
+    // 底座位置变了，等渲染完再以新圆心算摇杆向量
+    nextTick(() => { if (joyPid[node.id] === e.pointerId) updateJoy(e, node, el) })
+  } else {
+    updateJoy(e, node, el)
+  }
 }
 
 function onMove(e, node, kind) {
@@ -262,8 +312,9 @@ function onUp(e, node, kind) {
   }
 }
 
-function updateJoy(e, node) {
-  const el = e.currentTarget
+/** el 可显式传入：nextTick 回调里 e.currentTarget 已被置空，必须用当时捕获的元素 */
+function updateJoy(e, node, elIn) {
+  const el = elIn || e.currentTarget
   if (!el) return
   const r = el.getBoundingClientRect()
   const cx = r.left + r.width / 2
@@ -283,17 +334,91 @@ function updateJoy(e, node) {
   if (ny <= -0.35) want.add(d.up)
   if (ny >= 0.35) want.add(d.down)
 
-  const prev = joyHeld[node.id]
-  for (const f of prev) if (!want.has(f)) release(f)
-  for (const f of want) if (!prev.has(f)) press(f)
-  joyHeld[node.id] = want
+  // 只记录幅度与目标方向，实际按键由方波循环统一调度
+  const w = wave[node.id]
+  w.m = Math.min(1, len / R)
+  w.want = want
+  if (!w.active) {
+    w.active = true
+    w.phase = 'off'
+    w.tSwitch = 0
+    startWaveLoop()
+  }
+}
+
+/* ---------------- 方波微调循环 ---------------- */
+let waveRaf = 0
+
+function startWaveLoop() {
+  if (waveRaf) return
+  const step = () => {
+    const now = performance.now()
+    let any = false
+    for (const id of ['joyA', 'joyB']) {
+      const w = wave[id]
+      if (!w.active) continue
+      any = true
+      applyWave(id, w, now)
+    }
+    waveRaf = any ? requestAnimationFrame(step) : 0
+  }
+  waveRaf = requestAnimationFrame(step)
+}
+
+/** 按目标方向集合对齐实际按着的键（差集式，不重复发事件） */
+function syncKeys(id, want) {
+  const held = joyHeld[id]
+  for (const f of held) if (!want.has(f)) release(f)
+  for (const f of want) if (!held.has(f)) press(f)
+  joyHeld[id] = new Set(want)
+}
+
+function applyWave(id, w, now) {
+  const held = joyHeld[id]
+  // 死区：回中，全部松开
+  if (w.m < SW.dz) {
+    for (const f of held) release(f)
+    held.clear()
+    return
+  }
+  // 推满：持续按住，全速
+  if (w.m >= SW.full) {
+    syncKeys(id, w.want)
+    return
+  }
+  // 方波：on 时长固定，off 时长随幅度拉长 → 幅度越小平均速度越慢
+  const duty = Math.min(1, (w.m - SW.dz) / (SW.full - SW.dz))
+  if (w.phase === 'on') {
+    if (now >= w.tSwitch) {
+      w.phase = 'off'
+      const period = clamp(SW.onMs / Math.max(duty, 0.02), SW.minPeriod, SW.maxPeriod)
+      w.tSwitch = now + period - SW.onMs
+      for (const f of held) release(f)
+      held.clear()
+    } else {
+      syncKeys(id, w.want)
+    }
+  } else if (now >= w.tSwitch) {
+    w.phase = 'on'
+    w.tSwitch = now + SW.onMs
+    syncKeys(id, w.want)
+  }
 }
 
 function endJoy(node) {
-  for (const f of joyHeld[node.id]) release(f)
-  joyHeld[node.id].clear()
-  knobs[node.id] = { x: 0, y: 0 }
-  joyPid[node.id] = null
+  const id = node.id
+  wave[id].active = false
+  for (const f of joyHeld[id]) release(f)
+  joyHeld[id].clear()
+  knobs[id] = { x: 0, y: 0 }
+  joyPid[id] = null
+  // 摇杆底座弹回吸附前的位置
+  const home = joyHome[id]
+  if (home) {
+    const t = findNode(id)
+    if (t) { t.x = home.x; t.y = home.y }
+    joyHome[id] = null
+  }
 }
 
 function onBlankDown() {
@@ -378,9 +503,20 @@ onMounted(() => {
   // 摇杆初始角度清零
   knobs.joyA = { x: 0, y: 0 }
   knobs.joyB = { x: 0, y: 0 }
+  // 手机端切后台 / WebView 被盖住时兜底松键，避免角色一直走
+  document.addEventListener('visibilitychange', onVisibility)
   // 本组件只在「开着虚拟按键」时挂载，挂上就说明 on=true，写回方案供下次自动恢复
   scheme.on = true
 })
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibility)
+  if (waveRaf) { cancelAnimationFrame(waveRaf); waveRaf = 0 }
+})
+
+function onVisibility() {
+  if (document.hidden) releaseAll()
+}
+
 defineExpose({ releaseAll, scheme })
 </script>
 
@@ -393,6 +529,7 @@ defineExpose({ releaseAll, scheme })
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 /* 设置模式下整层接管触摸：既方便点空白取消选中，也避免误触游戏 */
 .vpad.is-edit { pointer-events: auto; }
@@ -404,7 +541,17 @@ defineExpose({ releaseAll, scheme })
   pointer-events: auto;
   touch-action: none;
   border-radius: 50%;
+  /* 底座位置变化（吸附/弹回）走过渡；推杆中（live）禁用，保证跟手 */
+  transition: left 0.16s ease, top 0.16s ease;
 }
+/* 隐形热区：比可见圆大一圈，拇指不必精确落在圆心 */
+.vjoy::before {
+  content: '';
+  position: absolute;
+  inset: -46%;
+  border-radius: 50%;
+}
+.vjoy.live { transition: none; }
 .vjoy-base {
   position: absolute;
   inset: 0;
