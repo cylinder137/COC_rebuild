@@ -77,4 +77,75 @@ public class BugFeedbackService {
         data.put("status", 1);
         return data;
     }
+
+    /** 管理端详情 */
+    public Map<String, Object> adminDetail(long bugId) {
+        AuthContext.requireAdmin();
+        Map<String, Object> row = bugFeedbackMapper.findById(bugId);
+        if (row == null) {
+            throw BizException.notFound("反馈不存在");
+        }
+        return row;
+    }
+
+    /** 管理端新增：代用户补录，user_id 不传记在管理员名下 */
+    @Transactional
+    public Map<String, Object> adminCreate(Map<String, Object> body) {
+        AuthContext.requireAdmin();
+        String content = Params.requireStr(body, "content", "反馈内容");
+        if (content.length() > 1000) {
+            throw BizException.badRequest("反馈内容过长（<=1000 字）");
+        }
+        Long uid = Params.lng(body, "user_id");
+        if (uid == null) {
+            uid = AuthContext.requireUserId();
+        }
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("user_id", uid);
+        p.put("content", content);
+        bugFeedbackMapper.insertFeedback(p);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("bug_id", p.get("bug_id"));
+        data.put("status", 0);
+        return data;
+    }
+
+    /** 管理端编辑：content / status 至少改一项 */
+    @Transactional
+    public Map<String, Object> adminUpdate(long bugId, Map<String, Object> body) {
+        AuthContext.requireAdmin();
+        Map<String, Object> row = bugFeedbackMapper.findById(bugId);
+        if (row == null) {
+            throw BizException.notFound("反馈不存在");
+        }
+        String content = Params.str(body, "content");
+        Integer status = Params.integer(body, "status", null);
+        if (content == null && status == null) {
+            throw BizException.badRequest("没有要修改的字段");
+        }
+        if (status != null && status != 0 && status != 1) {
+            throw BizException.badRequest("status 只支持 0（未受理）/ 1（已处理）");
+        }
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("bug_id", bugId);
+        p.put("content", content);
+        p.put("status", status);
+        bugFeedbackMapper.updateById(p);
+        return bugFeedbackMapper.findById(bugId);
+    }
+
+    /** 管理端删除 */
+    @Transactional
+    public Map<String, Object> adminDelete(long bugId) {
+        AuthContext.requireAdmin();
+        Map<String, Object> row = bugFeedbackMapper.findById(bugId);
+        if (row == null) {
+            throw BizException.notFound("反馈不存在");
+        }
+        bugFeedbackMapper.deleteById(bugId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("bug_id", bugId);
+        data.put("deleted", true);
+        return data;
+    }
 }

@@ -1,5 +1,6 @@
 package uk.collectionofcreations.coc.mapper;
 
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -36,4 +37,15 @@ public interface BugFeedbackMapper {
 
     @Update("UPDATE bug_feedback SET status = 1 WHERE bug_id = #{bug_id}")
     int markHandled(@Param("bug_id") long bugId);
+
+    /** 管理端编辑：content / status 二选一或同时改（动态 set） */
+    @Update("<script>UPDATE bug_feedback "
+            + "<set><if test='content != null'> content = #{content},</if>"
+            + "<if test='status != null'> status = #{status},</if></set> "
+            + "WHERE bug_id = #{bug_id}</script>")
+    int updateById(Map<String, Object> param);
+
+    /** 管理端删除 */
+    @Delete("DELETE FROM bug_feedback WHERE bug_id = #{bug_id}")
+    int deleteById(@Param("bug_id") long bugId);
 }

@@ -180,6 +180,31 @@ public class AdminController {
         return ApiResponse.ok(bugFeedbackService.adminList(query));
     }
 
+    /** 详情 */
+    @GetMapping("/bug-feedback/{bug_id}")
+    public ApiResponse<Map<String, Object>> bugFeedbackDetail(@PathVariable("bug_id") long bugId) {
+        return ApiResponse.ok(bugFeedbackService.adminDetail(bugId));
+    }
+
+    /** 新增：代用户补录，user_id 不传记在管理员名下 */
+    @PostMapping("/bug-feedback")
+    public ApiResponse<Map<String, Object>> createBugFeedback(@RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(bugFeedbackService.adminCreate(body));
+    }
+
+    /** 编辑：content / status 至少改一项 */
+    @PutMapping("/bug-feedback/{bug_id}")
+    public ApiResponse<Map<String, Object>> updateBugFeedback(@PathVariable("bug_id") long bugId,
+                                                              @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(bugFeedbackService.adminUpdate(bugId, body));
+    }
+
+    /** 删除 */
+    @DeleteMapping("/bug-feedback/{bug_id}")
+    public ApiResponse<Map<String, Object>> deleteBugFeedback(@PathVariable("bug_id") long bugId) {
+        return ApiResponse.ok(bugFeedbackService.adminDelete(bugId));
+    }
+
     /** 标记已处理 */
     @PostMapping("/bug-feedback/{bug_id}/handle")
     public ApiResponse<Map<String, Object>> handleBugFeedback(@PathVariable("bug_id") long bugId) {
